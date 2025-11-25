@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GameType, GameData, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem } from "../types";
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY || '';
+const ai = new GoogleGenAI({ apiKey: apiKey });
 
 // Schemas for structured output
 const quizSchema = {

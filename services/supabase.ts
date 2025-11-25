@@ -1,9 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
-// In a real environment, these would be in a .env file
-// You must replace these with your actual Supabase project credentials
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || ''; 
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_KEY || '';
+// Vercel/Vite usually uses import.meta.env for env vars starting with VITE_
+// We check both standard process.env (for some setups) and import.meta.env (for Vite)
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''; 
+const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
