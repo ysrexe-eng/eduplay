@@ -35,14 +35,14 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
 
         try {
             if (mode === 'forgot') {
-                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                const { error } = await (supabase.auth as any).resetPasswordForEmail(email, {
                     redirectTo: window.location.origin + '/?view=reset', // Handle reset flow
                 });
                 if (error) throw error;
                 setMsg('Check your email for the password reset link.');
                 setIsSuccess(true);
             } else if (mode === 'signup') {
-                const { error } = await supabase.auth.signUp({
+                const { error } = await (supabase.auth as any).signUp({
                     email,
                     password,
                 });
@@ -51,7 +51,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
                 setIsSuccess(true);
                 setMode('signin');
             } else {
-                const { error } = await supabase.auth.signInWithPassword({
+                const { error } = await (supabase.auth as any).signInWithPassword({
                     email,
                     password,
                 });

@@ -11,7 +11,9 @@ interface NavbarProps {
 const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session }) => {
   
   const handleSignOut = async () => {
-      await supabase.auth.signOut();
+      if (supabase) {
+          await (supabase.auth as any).signOut();
+      }
   };
 
   return (

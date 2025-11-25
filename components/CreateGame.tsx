@@ -2,16 +2,15 @@
 import React, { useState, useEffect } from 'react';
 import { GameType, GameModule, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem, SequenceItem, ClozeItem, GameSettings } from '../types';
 import { Save, Trash2, ArrowRight, ArrowLeft, Settings, Plus, Minus, X, Globe, Lock, Loader2 } from 'lucide-react';
-import { supabase } from '../services/supabase';
 
 interface CreateGameProps {
-  onGameCreated: (game: GameModule) => void;
+  onSave: (gameData: Partial<GameModule>, isEdit: boolean) => Promise<void>;
   onCancel: () => void;
   initialGame?: GameModule | null;
   userId?: string;
 }
 
-const CreateGame: React.FC<CreateGameProps> = ({ onGameCreated, onCancel, initialGame, userId }) => {
+const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, userId }) => {
   const [step, setStep] = useState(1);
   const [showSettings, setShowSettings] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -93,7 +92,7 @@ const CreateGame: React.FC<CreateGameProps> = ({ onGameCreated, onCancel, initia
     }
   }, [initialGame]);
 
-  const handleSave = async () => {
+  const handleSaveClick = async () => {
     let finalData: any = null;
 
     if (gameType === GameType.QUIZ) {
@@ -129,78 +128,20 @@ const CreateGame: React.FC<CreateGameProps> = ({ onGameCreated, onCancel, initia
     }
 
     setIsSaving(true);
-
     try {
-        if (!supabase) {
-            // Demo Mode Saving (In-Memory)
-            const demoGame: GameModule = {
-                id: initialGame?.id || `demo-${Date.now()}`,
-                title,
-                description: description || `A ${gameType.toLowerCase()} game.`,
-                category: 'Custom',
-                gameType,
-                data: finalData,
-                settings,
-                author: 'You',
-                author_id: userId || 'demo-user',
-                plays: 0,
-                likes: 0,
-                isPublic
-            };
-            setTimeout(() => {
-                onGameCreated(demoGame);
-                setIsSaving(false);
-            }, 500);
-            return;
-        }
-
-        const gamePayload = {
+        const gamePayload: Partial<GameModule> = {
+            id: initialGame?.id,
             title,
             description: description || `A ${gameType.toLowerCase()} game.`,
-            game_type: gameType,
+            gameType,
             data: finalData,
             settings: settings,
             author_id: userId,
-            is_public: isPublic,
-            author_name: 'Teacher' 
+            isPublic,
+            author: 'You' // Will be overwritten by DB or kept in Demo
         };
 
-        let result;
-        if (initialGame && initialGame.id) {
-            const { data, error } = await supabase
-                .from('games')
-                .update(gamePayload)
-                .eq('id', initialGame.id)
-                .select()
-                .single();
-            if(error) throw error;
-            result = data;
-        } else {
-            const { data, error } = await supabase
-                .from('games')
-                .insert([gamePayload])
-                .select()
-                .single();
-             if(error) throw error;
-             result = data;
-        }
-
-        const mappedGame: GameModule = {
-            id: result.id,
-            title: result.title,
-            description: result.description,
-            category: 'Custom',
-            gameType: result.game_type as GameType,
-            data: result.data,
-            settings: result.settings,
-            author: result.author_name || 'You',
-            author_id: result.author_id,
-            plays: result.plays || 0,
-            likes: result.likes || 0,
-            isPublic: result.is_public
-        };
-
-        onGameCreated(mappedGame);
+        await onSave(gamePayload, !!initialGame);
     } catch (err: any) {
         alert("Error saving game: " + err.message);
     } finally {
@@ -313,7 +254,7 @@ const CreateGame: React.FC<CreateGameProps> = ({ onGameCreated, onCancel, initia
              {renderSettings()}
              <div className="flex justify-between pt-8 border-t border-slate-700 mt-6">
                 <button onClick={() => setStep(1)} className="px-4 py-2 text-gray-400 hover:text-white flex items-center"><ArrowLeft className="mr-2 w-4 h-4"/> Back</button>
-                <button onClick={handleSave} disabled={isSaving} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 flex items-center shadow-lg font-bold">
+                <button onClick={handleSaveClick} disabled={isSaving} className="px-6 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-500 flex items-center shadow-lg font-bold">
                     {isSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 w-4 h-4" />} {initialGame ? 'Update' : 'Publish'}
                 </button>
              </div>

@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { GameModule, GameType } from '../types';
 import { Brain, Copy, CheckSquare, Layers, ListOrdered, Type, Edit, Trash2, Play, Heart, Globe, Lock } from 'lucide-react';
 import { supabase } from '../services/supabase';
@@ -18,6 +18,11 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
   
   const isOwner = currentUserId === game.author_id;
 
+  // Sync with parent props when realtime update occurs
+  useEffect(() => {
+      setLikes(game.likes || 0);
+  }, [game.likes]);
+
   const handleLike = async (e: React.MouseEvent) => {
       e.stopPropagation();
       if (!currentUserId) return; // Must be logged in
@@ -29,14 +34,14 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
 
       if (supabase) {
           try {
-             // Insert into likes table to prevent duplicates via RLS/Constraints
+             // Insert into likes table
              const { error: likeError } = await supabase.from('likes').insert({ user_id: currentUserId, game_id: game.id });
              
              if (!likeError) {
-                 // Call RPC to increment counter safely
+                 // Call RPC to increment counter securely
                  await supabase.rpc('increment_likes', { row_id: game.id });
              } else {
-                 // Revert if already liked (duplicate key)
+                 // Revert if already liked or error
                  setLikes(l => l - 1);
                  setLiked(false);
              }
