@@ -6,7 +6,7 @@ import GamePlayer from './components/GamePlayer';
 import Auth from './components/Auth';
 import Settings from './components/Settings';
 import { GameModule } from './types';
-import { PlusCircle, Search, Loader2 } from 'lucide-react';
+import { PlusCircle, Search, Loader2, ArrowDown } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from './services/supabase';
 import { useGames } from './hooks/useGames';
 
@@ -19,7 +19,18 @@ const App: React.FC = () => {
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot' | 'update_password'>('signin');
 
   // Use custom hook for data management
-  const { publicGames, myGames, loading, saveGame, deleteGame, deleteAllUserData } = useGames(session?.user?.id);
+  const { 
+    publicGames, 
+    myGames, 
+    loading, 
+    saveGame, 
+    deleteGame, 
+    deleteAllUserData,
+    hasMorePublic,
+    loadMore,
+    handleSearch,
+    searchQuery
+  } = useGames(session?.user?.id);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -36,15 +47,12 @@ const App: React.FC = () => {
                  refresh_token: refreshToken
              });
              if (!error) {
-                 // Clean URL without reloading
                  window.history.replaceState({}, document.title, window.location.pathname);
-                 // Session logic below will pick this up
              } else {
                  console.error("QR Login Error:", error);
              }
         }
         
-        // Handle Password Reset Redirect from Email
         if (params.get('view') === 'reset' || window.location.hash.includes('type=recovery')) {
              setView('auth');
              setAuthMode('update_password');
@@ -54,26 +62,21 @@ const App: React.FC = () => {
 
         if (!isSupabaseConfigured()) {
             setIsAuthChecking(false);
-            return; // Demo mode
+            return;
         }
 
         if (supabase) {
-            // Get initial session
             const { data: { session: initialSession } } = await (supabase.auth as any).getSession();
             setSession(initialSession);
             
-            // Listen for changes
             const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((event: string, currentSession: any) => {
                 setSession(currentSession);
-                
                 if (event === 'PASSWORD_RECOVERY') {
                     setAuthMode('update_password');
                     setView('auth');
                 } else if (event === 'SIGNED_IN') {
-                    // Stay on current view or go to home if in auth
                     if (view === 'auth') setView('home');
                 } else if (event === 'SIGNED_OUT') {
-                    // Don't force auth view, just update session state
                     setAuthMode('signin');
                 }
             });
@@ -105,7 +108,6 @@ const App: React.FC = () => {
   const handleDeleteAccount = async () => {
       const confirmMsg = "Hesabınızı silmek istediğinizden emin misiniz?\n\nTüm oyunlarınız, beğenileriniz ve verileriniz KALICI OLARAK SİLİNECEKTİR. Bu işlem geri alınamaz.";
       if(window.confirm(confirmMsg)) {
-          // Double confirm
           if(window.confirm("Lütfen son kez onaylayın: Her şeyi sil?")) {
               try {
                   await deleteAllUserData();
@@ -126,50 +128,74 @@ const App: React.FC = () => {
     setView('play');
   };
 
-  const renderGameGrid = (gamesList: GameModule[]) => {
-      if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-indigo-500"/></div>;
+  const renderSearchBar = () => (
+      <div className="mb-6 relative">
+          <input 
+             type="text" 
+             placeholder="Uygulama veya açıklama ara..." 
+             value={searchQuery}
+             onChange={(e) => handleSearch(e.target.value)}
+             className="w-full bg-slate-800 border border-slate-700 text-white rounded-lg pl-10 pr-4 py-3 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none shadow-sm"
+          />
+          <Search className="absolute left-3 top-3.5 h-5 w-5 text-gray-400" />
+      </div>
+  );
+
+  const renderGameGrid = (gamesList: GameModule[], isPaginationEnabled = false) => {
+      if (loading && gamesList.length === 0) return <div className="flex justify-center py-20"><Loader2 className="w-10 h-10 animate-spin text-indigo-500"/></div>;
       
       if (gamesList.length === 0) {
           return (
             <div className="text-center py-20 bg-slate-800 rounded-xl border border-slate-700 border-dashed">
                 <Search className="mx-auto h-12 w-12 text-slate-600 mb-4" />
                 <h3 className="text-lg font-medium text-white">Uygulama bulunamadı</h3>
-                <p className="text-slate-400 mt-2">İlk oluşturan sen ol!</p>
+                <p className="text-slate-400 mt-2">{searchQuery ? 'Arama kriterlerine uygun sonuç yok.' : 'Henüz içerik eklenmemiş.'}</p>
             </div>
           );
       }
       return (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {gamesList.map((game) => (
-            <GameCard 
-                key={game.id} 
-                game={game} 
-                onPlay={handlePlayGame} 
-                onEdit={(g) => { setEditingGame(g); setView('create'); }}
-                onDelete={handleDeleteGame}
-                currentUserId={session?.user?.id}
-            />
-            ))}
+        <div className="flex flex-col space-y-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                {gamesList.map((game) => (
+                <GameCard 
+                    key={game.id} 
+                    game={game} 
+                    onPlay={handlePlayGame} 
+                    onEdit={(g) => { setEditingGame(g); setView('create'); }}
+                    onDelete={handleDeleteGame}
+                    currentUserId={session?.user?.id}
+                />
+                ))}
+            </div>
+            {isPaginationEnabled && hasMorePublic && (
+                <div className="flex justify-center mt-6">
+                    <button 
+                        onClick={loadMore}
+                        disabled={loading}
+                        className="flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-full font-medium transition-colors border border-slate-700 shadow-lg"
+                    >
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2"/> : <ArrowDown className="w-4 h-4 mr-2" />}
+                        Daha Fazla Yükle
+                    </button>
+                </div>
+            )}
         </div>
       );
   };
 
   const renderContent = () => {
-    // Show loader while checking auth status
     if (isAuthChecking) {
          return <div className="flex justify-center items-center h-64"><Loader2 className="w-8 h-8 animate-spin text-indigo-500"/></div>;
     }
 
-    // Special case: If in recovery mode, show Auth regardless of session
     if (authMode === 'update_password' && view === 'auth') {
         return <Auth onSuccess={() => { setAuthMode('signin'); setView('home'); }} initialMode="update_password" />;
     }
 
-    // If not logged in and explicitly trying to create or access settings
     if (!session && (view === 'create' || view === 'settings')) {
          return <Auth onSuccess={(user) => {
             setSession(user ? { user } : null);
-            setView(view); // Stay on target view
+            setView(view); 
         }} initialMode={authMode} />;
     }
 
@@ -202,19 +228,18 @@ const App: React.FC = () => {
         );
       case 'community':
          return (
-             <div className="space-y-8 animate-fade-in">
-                <div className="text-center mb-8">
+             <div className="space-y-6 animate-fade-in">
+                <div className="text-center mb-6">
                     <h1 className="text-3xl font-bold text-white mb-2">Topluluk Uygulamaları</h1>
-                    <p className="text-slate-400">Başkaları tarafından oluşturulan eğitici oyunları keşfet.</p>
+                    <p className="text-slate-400">Keşfet, Oyna ve Öğren.</p>
                 </div>
-                {renderGameGrid(publicGames)}
+                {renderSearchBar()}
+                {renderGameGrid(publicGames, true)}
              </div>
          );
       case 'home':
       default:
-        // Default View: Show My Apps if logged in, otherwise just a welcome or empty state (or force community)
         if (!session) {
-             // If not logged in, show Community by default or a landing page
              return (
                  <div className="space-y-8 animate-fade-in">
                     <div className="text-center py-10">
@@ -227,7 +252,8 @@ const App: React.FC = () => {
                     </div>
                     <div>
                          <h2 className="text-2xl font-bold text-white mb-6">Popüler Uygulamalar</h2>
-                         {renderGameGrid(publicGames)}
+                         {renderSearchBar()}
+                         {renderGameGrid(publicGames, true)}
                     </div>
                  </div>
              );
@@ -239,7 +265,7 @@ const App: React.FC = () => {
                 <div className="relative z-10 max-w-xl">
                    <h1 className="text-3xl font-bold mb-4">Panelim</h1>
                    <p className="text-slate-300 mb-6 text-lg">
-                     Eğitim modüllerini yönet.
+                     Uygulamalarını yönet ve düzenle.
                    </p>
                    <button 
                      onClick={() => { setEditingGame(null); setView('create'); }}
@@ -255,6 +281,7 @@ const App: React.FC = () => {
               <div className="flex items-center justify-between mb-6">
                  <h2 className="text-xl font-bold text-white">Uygulamalarım</h2>
               </div>
+              {renderSearchBar()}
               {renderGameGrid(myGames)}
             </div>
           </div>
