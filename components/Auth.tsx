@@ -59,7 +59,8 @@ const Auth: React.FC<AuthProps> = ({ onSuccess }) => {
                 onSuccess();
             }
         } catch (error: any) {
-            setMsg(error.message);
+            console.error("Auth error:", error);
+            setMsg(error.message || "An unexpected error occurred");
             setIsSuccess(false);
         } finally {
             setLoading(false);

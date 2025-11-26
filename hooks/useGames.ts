@@ -8,9 +8,7 @@ export const useGames = (userId?: string) => {
     const [myGames, setMyGames] = useState<GameModule[]>([]);
     const [loading, setLoading] = useState(true);
     
-    // In-memory store for Demo mode
-    const [demoGames, setDemoGames] = useState<GameModule[]>([]);
-
+    // Helper to map DB columns to our Typescript Interface
     const mapDbToGame = (dbGame: any): GameModule => ({
         id: dbGame.id,
         title: dbGame.title,
@@ -26,32 +24,39 @@ export const useGames = (userId?: string) => {
         isPublic: dbGame.is_public
     });
 
+    // 1. Fetch Games Function
     const fetchGames = useCallback(async () => {
+        // DEMO MODE
         if (!isSupabaseConfigured()) {
-            // Demo Mode: Filter local demoGames
+            const localData = localStorage.getItem('demo_games');
+            const demoGames: GameModule[] = localData ? JSON.parse(localData) : [];
+            
+            // Filter locally
             setMyGames(demoGames.filter(g => g.author_id === (userId || 'demo-user')));
             setPublicGames(demoGames.filter(g => g.isPublic));
             setLoading(false);
             return;
         }
 
+        // SUPABASE MODE
         if (!supabase) return;
 
         setLoading(true);
         try {
-            // Fetch Public Games
+            // A. Fetch Public Games
             const { data: publicData, error: pubError } = await supabase
                 .from('games')
                 .select('*')
                 .eq('is_public', true)
                 .order('created_at', { ascending: false });
             
-            if (pubError) throw pubError;
-            if (publicData) {
+            if (pubError) {
+                console.error("Error fetching public games:", pubError);
+            } else if (publicData) {
                 setPublicGames(publicData.map(mapDbToGame));
             }
 
-            // Fetch My Games (if logged in)
+            // B. Fetch My Games (if logged in)
             if (userId) {
                 const { data: myData, error: myError } = await supabase
                     .from('games')
@@ -59,71 +64,91 @@ export const useGames = (userId?: string) => {
                     .eq('author_id', userId)
                     .order('created_at', { ascending: false });
                 
-                if (myError) throw myError;
-                if (myData) {
+                if (myError) {
+                    console.error("Error fetching my games:", myError);
+                } else if (myData) {
                     setMyGames(myData.map(mapDbToGame));
                 }
             } else {
                 setMyGames([]);
             }
         } catch (error) {
-            console.error("Error fetching games:", error);
+            console.error("Unexpected error fetching games:", error);
         } finally {
             setLoading(false);
         }
-    }, [userId, demoGames]); // demoGames dependency ensures refresh when demo state changes
+    }, [userId]);
 
-    // Setup Realtime Subscription
+    // 2. Realtime Subscription Setup
     useEffect(() => {
-        if (!isSupabaseConfigured() || !supabase) return;
-
+        // Initial Fetch
         fetchGames();
 
+        if (!isSupabaseConfigured() || !supabase) return;
+
+        // Subscribe to changes in the 'games' table
         const channel = supabase
             .channel('public:games')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'games' }, (payload) => {
-                // In a production app, we might merge payload into state intelligently.
-                // For simplicity, we refetch to ensure consistency (especially with sorts/filters).
-                console.log('Realtime update received:', payload);
-                fetchGames();
-            })
-            .subscribe();
+            .on(
+                'postgres_changes', 
+                { event: '*', schema: 'public', table: 'games' }, 
+                (payload) => {
+                    console.log('Realtime change detected:', payload);
+                    // Refresh data when any change happens
+                    fetchGames(); 
+                }
+            )
+            .subscribe((status) => {
+                if (status === 'SUBSCRIBED') {
+                    console.log('Connected to Realtime updates');
+                }
+            });
 
         return () => {
             supabase.removeChannel(channel);
         };
     }, [fetchGames]);
 
+    // 3. Save Function (Create or Update)
     const saveGame = async (gameData: Partial<GameModule>, isEdit: boolean): Promise<GameModule> => {
-        // Prepare Payload
+        
+        // DEMO MODE SAVE
+        if (!isSupabaseConfigured() || !supabase) {
+            const localData = localStorage.getItem('demo_games');
+            let demoGames: GameModule[] = localData ? JSON.parse(localData) : [];
+
+            const newGame: GameModule = {
+                ...gameData as GameModule,
+                id: isEdit ? gameData.id! : `demo-${Date.now()}`,
+                plays: gameData.plays || 0,
+                likes: gameData.likes || 0,
+                author_id: userId || 'demo-user', // Ensure author is attached
+                author: 'You'
+            };
+
+            if (isEdit) {
+                demoGames = demoGames.map(g => g.id === newGame.id ? newGame : g);
+            } else {
+                demoGames = [newGame, ...demoGames];
+            }
+
+            localStorage.setItem('demo_games', JSON.stringify(demoGames));
+            fetchGames(); // Update local state
+            return newGame;
+        }
+
+        // SUPABASE SAVE
         const payload = {
             title: gameData.title,
             description: gameData.description,
             game_type: gameData.gameType,
             data: gameData.data,
             settings: gameData.settings,
-            author_id: gameData.author_id,
+            author_id: userId,
             is_public: gameData.isPublic,
             author_name: gameData.author
         };
 
-        if (!isSupabaseConfigured() || !supabase) {
-            // DEMO MODE SAVE
-            const newGame: GameModule = {
-                ...gameData as GameModule,
-                id: isEdit ? gameData.id! : `demo-${Date.now()}`,
-                plays: gameData.plays || 0,
-                likes: gameData.likes || 0,
-            };
-
-            setDemoGames(prev => {
-                if (isEdit) return prev.map(g => g.id === newGame.id ? newGame : g);
-                return [newGame, ...prev];
-            });
-            return newGame;
-        }
-
-        // SUPABASE SAVE
         let result;
         if (isEdit && gameData.id) {
             const { data, error } = await supabase
@@ -147,26 +172,33 @@ export const useGames = (userId?: string) => {
         return mapDbToGame(result);
     };
 
+    // 4. Delete Function
     const deleteGame = async (id: string) => {
+        // DEMO MODE DELETE
         if (!isSupabaseConfigured() || !supabase) {
-            setDemoGames(prev => prev.filter(g => g.id !== id));
+            const localData = localStorage.getItem('demo_games');
+            if (localData) {
+                const demoGames: GameModule[] = JSON.parse(localData);
+                const filtered = demoGames.filter(g => g.id !== id);
+                localStorage.setItem('demo_games', JSON.stringify(filtered));
+                fetchGames();
+            }
             return;
         }
 
-        // Attempt to delete associated likes first to prevent FK constraint error
-        // Note: This relies on RLS allowing the user to delete likes for their own game,
-        // or assumes the user is deleting their own likes.
-        // If other users have liked it, this might fail without ON DELETE CASCADE in SQL.
-        try {
-           await supabase.from('likes').delete().eq('game_id', id);
-        } catch (e) {
-            console.warn("Could not delete associated likes, proceeding to delete game...", e);
+        // SUPABASE DELETE
+        // Step 1: Manually delete 'likes' first to avoid Foreign Key Constraint error
+        const { error: likeError } = await supabase.from('likes').delete().eq('game_id', id);
+        if (likeError) {
+            console.warn("Error cleaning up likes (might be empty):", likeError.message);
         }
 
+        // Step 2: Delete the game
         const { error } = await supabase.from('games').delete().eq('id', id);
         if (error) throw error;
         
-        // Optimistic update (Realtime will also trigger)
+        // No need to manually update state, Realtime subscription will catch the DELETE event
+        // but we can do optimistic update if we want instant feedback
         setMyGames(prev => prev.filter(g => g.id !== id));
         setPublicGames(prev => prev.filter(g => g.id !== id));
     };

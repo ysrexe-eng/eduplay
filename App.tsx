@@ -15,35 +15,42 @@ const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
   const [activeGame, setActiveGame] = useState<GameModule | null>(null);
   const [editingGame, setEditingGame] = useState<GameModule | null>(null);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
 
   // Use custom hook for data management
   const { publicGames, myGames, loading, saveGame, deleteGame } = useGames(session?.user?.id);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const viewParam = params.get('view');
-    if (viewParam === 'reset') {
-        setView('auth');
-    }
+    const checkSession = async () => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('view') === 'reset') {
+            setView('auth');
+        }
 
-    if (!isSupabaseConfigured()) {
-        return;
-    }
+        if (!isSupabaseConfigured()) {
+            setIsAuthChecking(false);
+            return; // Demo mode
+        }
 
-    if (supabase) {
-        (supabase.auth as any).getSession().then(({ data: { session } }: any) => {
-            setSession(session);
-            if(!session) setView('community');
-        });
+        if (supabase) {
+            // Get initial session
+            const { data: { session: initialSession } } = await (supabase.auth as any).getSession();
+            setSession(initialSession);
+            
+            // Listen for changes
+            const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, currentSession: any) => {
+                setSession(currentSession);
+                if (currentSession && view === 'auth') {
+                    setView('home');
+                }
+            });
 
-        const { data: { subscription } } = (supabase.auth as any).onAuthStateChange((_event: any, session: any) => {
-            setSession(session);
-            if (session) setView('home');
-            else setView('community');
-        });
+            setIsAuthChecking(false);
+            return () => subscription.unsubscribe();
+        }
+    };
 
-        return () => subscription.unsubscribe();
-    }
+    checkSession();
   }, []);
 
   const handleSaveGame = async (gameData: Partial<GameModule>, isEdit: boolean) => {
@@ -96,6 +103,11 @@ const App: React.FC = () => {
   };
 
   const renderContent = () => {
+    // Show loader while checking auth status to prevent flashing Login screen
+    if (isAuthChecking) {
+         return <div className="flex justify-center items-center h-64"><Loader2 className="w-8 h-8 animate-spin text-indigo-500"/></div>;
+    }
+
     if (!session && view === 'auth') {
         return <Auth onSuccess={(user) => {
             setSession(user ? { user } : null);
@@ -138,7 +150,8 @@ const App: React.FC = () => {
          );
       case 'home':
       default:
-        if (!session) {
+        if (!session && !isAuthChecking) {
+             // If not logged in and trying to access home, show Auth
              return <Auth onSuccess={() => setView('home')} />;
         }
         return (
@@ -179,7 +192,7 @@ const App: React.FC = () => {
       
       {!isSupabaseConfigured() && (
           <div className="bg-yellow-600/20 border-b border-yellow-600/50 text-yellow-200 text-xs text-center py-1">
-              Demo Mode: Database not connected. Changes are local and temporary.
+              Demo Mode: Database not connected. Changes are saved to browser local storage.
           </div>
       )}
 

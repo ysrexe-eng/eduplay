@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { GameModule, GameType } from '../types';
 import { Brain, Copy, CheckSquare, Layers, ListOrdered, Type, Edit, Trash2, Play, Heart, Globe, Lock } from 'lucide-react';
-import { supabase } from '../services/supabase';
+import { supabase, isSupabaseConfigured } from '../services/supabase';
 
 interface GameCardProps {
   game: GameModule;
@@ -25,14 +25,14 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
 
   const handleLike = async (e: React.MouseEvent) => {
       e.stopPropagation();
-      if (!currentUserId) return; // Must be logged in
+      if (!currentUserId && isSupabaseConfigured()) return; // Must be logged in if Supabase
       if (liked) return;
 
       // Optimistic UI update
       setLikes(l => l + 1);
       setLiked(true);
 
-      if (supabase) {
+      if (isSupabaseConfigured() && supabase) {
           try {
              // Insert into likes table
              const { error: likeError } = await supabase.from('likes').insert({ user_id: currentUserId, game_id: game.id });
@@ -44,10 +44,13 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
                  // Revert if already liked or error
                  setLikes(l => l - 1);
                  setLiked(false);
+                 console.error("Like error:", likeError.message);
              }
           } catch (err) {
               console.error("Error liking game:", err);
           }
+      } else {
+          // Demo mode like (no persistence needed beyond optimistic for now, or could write to localStorage)
       }
   };
   
