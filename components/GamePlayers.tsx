@@ -71,7 +71,7 @@ export const QuizPlayer = ({ data, onFinish, randomize }: { data: { items: QuizI
 
       {showResult && (
         <div className="mt-8 animate-fade-in">
-           <button onClick={nextQuestion} className="w-full bg-white text-black py-4 rounded-xl font-bold hover:bg-slate-200 transition-colors shadow-lg">
+           <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-lg">
              {currentIdx === questions.length - 1 ? "Testi Bitir" : "Sonraki Soru"}
            </button>
         </div>
@@ -342,7 +342,7 @@ export const ClozePlayer = ({ data, onFinish, caseSensitive }: { data: { data: C
                 ))}
             </div>
             <div className="mt-10">
-                <button onClick={handleCheck} className="w-full bg-white text-black py-4 rounded-xl font-bold hover:bg-slate-200 transition-colors shadow-lg">Cevapları Kontrol Et</button>
+                <button onClick={handleCheck} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-500 transition-colors shadow-lg">Cevapları Kontrol Et</button>
             </div>
         </div>
     );
@@ -394,7 +394,7 @@ export const ScramblePlayer = ({ data, onFinish }: { data: { items: ScrambleItem
                 placeholder="Kelimeyi yazın..."
             />
             
-            <button onClick={handleCheck} className="w-full bg-white text-black py-4 rounded-xl font-bold hover:bg-slate-200 transition-colors">Kontrol Et</button>
+            <button onClick={handleCheck} className="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold hover:bg-indigo-500 transition-colors">Kontrol Et</button>
         </div>
     );
 };

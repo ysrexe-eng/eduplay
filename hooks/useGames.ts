@@ -68,8 +68,12 @@ export const useGames = (userId?: string) => {
                 );
             }
 
-            // Sort by newest for visibility
-            filtered.sort((a, b) => (new Date(b.id.split('-')[1] || 0).getTime() - new Date(a.id.split('-')[1] || 0).getTime()));
+            // Sort by newest for visibility. Safe parsing for demo ids which are like "demo-12345678"
+            filtered.sort((a, b) => {
+                const timeA = parseInt(a.id.split('-')[1]) || 0;
+                const timeB = parseInt(b.id.split('-')[1]) || 0;
+                return timeB - timeA;
+            });
 
             const start = page * ITEMS_PER_PAGE;
             const end = start + ITEMS_PER_PAGE;

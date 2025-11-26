@@ -49,7 +49,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
           <div className="absolute top-2 right-2 flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity z-20">
             <button 
               onClick={(e) => { e.stopPropagation(); onEdit(game); }}
-              className="p-2 bg-slate-900/80 backdrop-blur rounded-full hover:bg-white hover:text-black text-white shadow-lg border border-slate-600 transition-colors"
+              className="p-2 bg-slate-900/80 backdrop-blur rounded-full hover:bg-indigo-600 hover:text-white text-white shadow-lg border border-slate-600 transition-colors"
               title="Düzenle"
             >
               <Edit className="h-3.5 w-3.5" />

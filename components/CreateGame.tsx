@@ -10,7 +10,6 @@ interface CreateGameProps {
   userId?: string;
 }
 
-// Fix: Changed to named export
 export const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, userId }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [title, setTitle] = useState('');
@@ -115,7 +114,6 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initia
           // Limit 1
           if (currentStageType === GameType.QUIZ) {
               if (quizItems.length === 0) return alert("Lütfen soruyu oluşturun ve 'Soruyu Ekle' butonuna basın.");
-              // Limit check is implicitly handled by QuizEditor replacing the single item, but we check here too
           }
           if (currentStageType === GameType.SEQUENCE) {
               if (sequenceItems.length < 2) return alert("Sıralama için en az 2 öge gerekir.");
@@ -380,11 +378,12 @@ export const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initia
              {!isAddingStage && (
                  <div className="flex justify-between pt-8 border-t border-slate-700 mt-6">
                     <button onClick={onCancel} className="px-6 py-3 text-slate-400 hover:text-white flex items-center font-medium"><ArrowLeft className="mr-2 w-4 h-4"/> İptal</button>
-                    <button onClick={async () => { setIsSaving(true); await onSave({ id: initialGame?.id, title, description, gameType: GameType.MIXED, data: { type: GameType.MIXED, stages }, settings, author_id: userId, isPublic }, !!initialGame); setIsSaving(false); }} disabled={isSaving || !title || stages.length===0} className="px-8 py-3 bg-white text-black rounded-xl hover:bg-zinc-200 flex items-center shadow-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                    <button onClick={async () => { setIsSaving(true); await onSave({ id: initialGame?.id, title, description, gameType: GameType.MIXED, data: { type: GameType.MIXED, stages }, settings, author_id: userId, isPublic }, !!initialGame); setIsSaving(false); }} disabled={isSaving || !title || stages.length===0} className="px-8 py-3 bg-indigo-600 text-white rounded-xl hover:bg-indigo-500 flex items-center shadow-lg font-bold disabled:opacity-50 disabled:cursor-not-allowed transition-all">
                         {isSaving ? <Loader2 className="animate-spin mr-2"/> : <Save className="mr-2 w-5 h-5" />} {initialGame ? 'Güncelle' : 'Yayınla'}
                     </button>
                  </div>
              )}
         </div>
-    );
+    </div>
+  );
 };
