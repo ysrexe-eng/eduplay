@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameType, GameModule, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem, SequenceItem, ClozeItem, GameSettings, MixedStage } from '../types';
-import { Save, Trash2, ArrowRight, ArrowLeft, Settings, Plus, Minus, X, Globe, Lock, Loader2, ListPlus } from 'lucide-react';
+import { Save, Trash2, ArrowRight, ArrowLeft, Settings, Plus, Minus, X, Globe, Lock, Loader2, ListPlus, Edit, Check } from 'lucide-react';
 
 interface CreateGameProps {
   onSave: (gameData: Partial<GameModule>, isEdit: boolean) => Promise<void>;
@@ -41,6 +41,10 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
   const [stages, setStages] = useState<MixedStage[]>([]);
   const [currentStageType, setCurrentStageType] = useState<GameType>(GameType.QUIZ);
   const [isAddingStage, setIsAddingStage] = useState(false);
+  const [editingStageIndex, setEditingStageIndex] = useState<number | null>(null);
+
+  // Editing State for Items
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
 
   // Temporary Inputs
   const [tempQ, setTempQ] = useState({ q: '', options: ['', ''], correct: 0 });
@@ -123,23 +127,78 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
       return null;
   };
 
-  const handleAddStage = () => {
+  const handleAddOrUpdateStage = () => {
       const error = validateData(currentStageType);
       if (error) return alert(error);
 
       const stageData = generateDataForType(currentStageType);
       const newStage: MixedStage = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: editingStageIndex !== null ? stages[editingStageIndex].id : Math.random().toString(36).substr(2, 9),
           type: currentStageType,
-          title: `Sahne ${stages.length + 1} (${currentStageType})`,
+          title: `Sahne ${editingStageIndex !== null ? editingStageIndex + 1 : stages.length + 1} (${currentStageType})`,
           data: stageData
       };
 
-      setStages([...stages, newStage]);
+      if (editingStageIndex !== null) {
+          // Update existing stage
+          const updatedStages = [...stages];
+          updatedStages[editingStageIndex] = newStage;
+          setStages(updatedStages);
+          setEditingStageIndex(null);
+      } else {
+          // Add new stage
+          setStages([...stages, newStage]);
+      }
+
       setIsAddingStage(false);
-      
-      // Clear inputs
+      clearInputs();
+  };
+
+  const clearInputs = () => {
       setQuizItems([]); setMatchingPairs([]); setTfItems([]); setFlashcards([]); setSequenceItems([]); setSequenceQuestion(''); setClozeText('');
+      setEditingItemIndex(null);
+      setTempQ({ q: '', options: ['', ''], correct: 0 });
+      setTempMatch({ a: '', b: '' });
+      setTempTf({ stmt: '', isTrue: true });
+      setTempFlash({ f: '', b: '' });
+      setTempSeq('');
+  };
+
+  const handleEditStage = (index: number) => {
+      const stage = stages[index];
+      setCurrentStageType(stage.type);
+      setEditingStageIndex(index);
+      
+      // Load stage data into active buffers
+      try {
+          switch (stage.type) {
+            case GameType.QUIZ: setQuizItems((stage.data as any).items || []); break;
+            case GameType.MATCHING: setMatchingPairs((stage.data as any).pairs || []); break;
+            case GameType.TRUE_FALSE: setTfItems((stage.data as any).items || []); break;
+            case GameType.FLASHCARD: setFlashcards((stage.data as any).items || []); break;
+            case GameType.SEQUENCE:
+               const items = (stage.data as any).items as SequenceItem[] || [];
+               setSequenceItems(items.sort((a,b) => a.order - b.order).map(i => i.text));
+               setSequenceQuestion((stage.data as any).question || '');
+               break;
+            case GameType.CLOZE:
+               const d = (stage.data as any).data as ClozeItem;
+               if(d && d.textParts) {
+                   let reconstructed = "";
+                   d.textParts.forEach((part, i) => {
+                       reconstructed += part;
+                       if (i < d.answers.length) {
+                           reconstructed += `[${d.answers[i]}]`;
+                       }
+                   });
+                   setClozeText(reconstructed);
+               }
+               break;
+          }
+          setIsAddingStage(true);
+      } catch(e) {
+          console.error("Error loading stage for editing", e);
+      }
   };
 
   const handleSaveClick = async () => {
@@ -165,7 +224,7 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
             settings: settings,
             author_id: userId,
             isPublic,
-            author: 'Sen'
+            author: initialGame?.author || 'Sen'
         };
 
         await onSave(gamePayload, !!initialGame);
@@ -188,38 +247,163 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
     </div>
   );
 
+  // --- ITEM EDITORS ---
+
   const renderQuizEditor = () => {
     const addOption = () => setTempQ({ ...tempQ, options: [...tempQ.options, ''] });
     const removeOption = (idx: number) => { if (tempQ.options.length > 2) setTempQ({ ...tempQ, options: tempQ.options.filter((_, i) => i !== idx), correct: 0 }) };
+    
+    const handleAddOrUpdateQuestion = () => {
+        if (!tempQ.q || tempQ.options.some(o => !o.trim())) return;
+        
+        const newItem = { question: tempQ.q, options: tempQ.options, correctAnswer: tempQ.options[tempQ.correct] };
+        
+        if (editingItemIndex !== null) {
+            const updated = [...quizItems];
+            updated[editingItemIndex] = newItem;
+            setQuizItems(updated);
+            setEditingItemIndex(null);
+        } else {
+            setQuizItems([...quizItems, newItem]);
+        }
+        setTempQ({ q: '', options: ['', ''], correct: 0 });
+    };
+
+    const loadQuestionForEdit = (idx: number) => {
+        const item = quizItems[idx];
+        const correctIdx = item.options.indexOf(item.correctAnswer);
+        setTempQ({ q: item.question, options: [...item.options], correct: correctIdx !== -1 ? correctIdx : 0 });
+        setEditingItemIndex(idx);
+    };
+
     return (
       <div className="space-y-6">
-          <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+          <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 relative">
+              {editingItemIndex !== null && <span className="absolute top-2 right-2 text-xs text-yellow-500 font-bold">Düzenleniyor...</span>}
               <input placeholder="Soru metni..." value={tempQ.q} onChange={e => setTempQ({...tempQ, q: e.target.value})} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white mb-4" />
               <div className="space-y-3 mb-4">{tempQ.options.map((opt, idx) => (<div key={idx} className="flex items-center gap-2"><input type="radio" name="correct" checked={tempQ.correct === idx} onChange={() => setTempQ({...tempQ, correct: idx})} className="accent-indigo-500"/><input placeholder={`Seçenek ${idx + 1}`} value={opt} onChange={e => {const newOpts = [...tempQ.options]; newOpts[idx] = e.target.value; setTempQ({...tempQ, options: newOpts});}} className={`flex-grow bg-slate-900 border rounded p-2 text-white text-sm ${tempQ.correct === idx ? 'border-emerald-500' : 'border-slate-600'}`}/>{tempQ.options.length > 2 && <X size={16} onClick={() => removeOption(idx)} className="text-slate-500 hover:text-red-400 cursor-pointer"/>}</div>))}</div>
               <div className="flex gap-2 mb-4"><button onClick={addOption} className="text-xs bg-slate-700 text-white px-3 py-1 rounded flex items-center"><Plus size={12} className="mr-1"/> Seçenek Ekle</button></div>
-              <button onClick={() => { if (!tempQ.q || tempQ.options.some(o => !o.trim())) return; setQuizItems([...quizItems, { question: tempQ.q, options: tempQ.options, correctAnswer: tempQ.options[tempQ.correct] }]); setTempQ({ q: '', options: ['', ''], correct: 0 }); }} className="w-full bg-indigo-600 text-white py-2 rounded">Soru Ekle</button>
+              
+              <div className="flex gap-2">
+                  {editingItemIndex !== null && <button onClick={() => { setEditingItemIndex(null); setTempQ({ q: '', options: ['', ''], correct: 0 }); }} className="flex-1 bg-slate-600 text-white py-2 rounded hover:bg-slate-500">İptal</button>}
+                  <button onClick={handleAddOrUpdateQuestion} className={`flex-1 ${editingItemIndex !== null ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-indigo-600 hover:bg-indigo-500'} text-white py-2 rounded font-bold`}>
+                      {editingItemIndex !== null ? 'Soruyu Güncelle' : 'Soru Ekle'}
+                  </button>
+              </div>
           </div>
-          <div className="space-y-2">{quizItems.map((item, idx) => (<div key={idx} className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between"> <div className="truncate text-white">S{idx+1}: {item.question}</div> <Trash2 onClick={() => setQuizItems(quizItems.filter((_, i) => i !== idx))} className="text-red-400 cursor-pointer" size={16}/> </div>))}</div>
+          <div className="space-y-2">
+              {quizItems.map((item, idx) => (
+                  <div key={idx} className={`bg-slate-800 p-3 rounded border flex justify-between items-center ${editingItemIndex === idx ? 'border-yellow-500 bg-yellow-900/10' : 'border-slate-700'}`}> 
+                        <div className="truncate text-white flex-1 mr-2"><span className="font-bold text-gray-400 mr-2">{idx+1}.</span>{item.question}</div> 
+                        <div className="flex space-x-2">
+                             <Edit onClick={() => loadQuestionForEdit(idx)} className="text-blue-400 cursor-pointer hover:text-blue-300" size={16} />
+                             <Trash2 onClick={() => setQuizItems(quizItems.filter((_, i) => i !== idx))} className="text-red-400 cursor-pointer hover:text-red-300" size={16}/> 
+                        </div>
+                  </div>
+              ))}
+          </div>
       </div>
     );
   };
   
-  const renderMatchingEditor = () => ( <div className="space-y-6"> <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4"> <input placeholder="Öge A" value={tempMatch.a} onChange={e => setTempMatch({...tempMatch, a: e.target.value})} className="bg-slate-900 border border-slate-600 rounded p-2 text-white" /> <input placeholder="Öge B" value={tempMatch.b} onChange={e => setTempMatch({...tempMatch, b: e.target.value})} className="bg-slate-900 border border-slate-600 rounded p-2 text-white" /> <button onClick={() => { if (!tempMatch.a || !tempMatch.b) return; setMatchingPairs([...matchingPairs, { id: Math.random().toString(), itemA: tempMatch.a, itemB: tempMatch.b }]); setTempMatch({ a: '', b: '' }); }} className="md:col-span-2 bg-indigo-600 text-white py-2 rounded">Çift Ekle</button> </div> <div className="space-y-2">{matchingPairs.map((pair, idx) => (<div key={idx} className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between items-center"><div className="text-gray-300">{pair.itemA} ↔ {pair.itemB}</div><Trash2 onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>))}</div> </div> );
+  const renderMatchingEditor = () => {
+    const handleAddOrUpdatePair = () => {
+         if (!tempMatch.a || !tempMatch.b) return; 
+         
+         const newPair = { id: editingItemIndex !== null ? matchingPairs[editingItemIndex].id : Math.random().toString(), itemA: tempMatch.a, itemB: tempMatch.b };
+
+         if (editingItemIndex !== null) {
+            const updated = [...matchingPairs];
+            updated[editingItemIndex] = newPair;
+            setMatchingPairs(updated);
+            setEditingItemIndex(null);
+         } else {
+            setMatchingPairs([...matchingPairs, newPair]);
+         }
+         setTempMatch({ a: '', b: '' });
+    };
+
+    const loadPairForEdit = (idx: number) => {
+        setTempMatch({ a: matchingPairs[idx].itemA, b: matchingPairs[idx].itemB });
+        setEditingItemIndex(idx);
+    };
+
+    return ( 
+      <div className="space-y-6"> 
+          <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 grid grid-cols-1 md:grid-cols-2 gap-4 relative"> 
+                {editingItemIndex !== null && <span className="absolute top-2 right-2 text-xs text-yellow-500 font-bold">Düzenleniyor...</span>}
+                <input placeholder="Öge A" value={tempMatch.a} onChange={e => setTempMatch({...tempMatch, a: e.target.value})} className="bg-slate-900 border border-slate-600 rounded p-2 text-white" /> 
+                <input placeholder="Öge B" value={tempMatch.b} onChange={e => setTempMatch({...tempMatch, b: e.target.value})} className="bg-slate-900 border border-slate-600 rounded p-2 text-white" /> 
+                
+                <div className="md:col-span-2 flex gap-2">
+                    {editingItemIndex !== null && <button onClick={() => { setEditingItemIndex(null); setTempMatch({ a: '', b: '' }); }} className="flex-1 bg-slate-600 text-white py-2 rounded">İptal</button>}
+                    <button onClick={handleAddOrUpdatePair} className={`flex-1 ${editingItemIndex !== null ? 'bg-yellow-600' : 'bg-indigo-600'} text-white py-2 rounded`}>
+                         {editingItemIndex !== null ? 'Çifti Güncelle' : 'Çift Ekle'}
+                    </button> 
+                </div>
+          </div> 
+          <div className="space-y-2">
+              {matchingPairs.map((pair, idx) => (
+                  <div key={idx} className={`bg-slate-800 p-3 rounded border flex justify-between items-center ${editingItemIndex === idx ? 'border-yellow-500 bg-yellow-900/10' : 'border-slate-700'}`}>
+                      <div className="text-gray-300 truncate mr-2">{pair.itemA} ↔ {pair.itemB}</div>
+                      <div className="flex space-x-2 shrink-0">
+                          <Edit onClick={() => loadPairForEdit(idx)} className="text-blue-400 cursor-pointer hover:text-blue-300" size={16} />
+                          <Trash2 onClick={() => setMatchingPairs(matchingPairs.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer hover:text-red-300"/>
+                      </div>
+                  </div>
+              ))}
+          </div> 
+      </div> 
+    );
+  };
   
-  const renderSequenceEditor = () => ( 
-    <div className="space-y-6"> 
-        <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
-             <label className="block text-sm text-gray-400 mb-2">Soru / Talimat (İsteğe bağlı)</label>
-             <input placeholder="Örn: Küçükten büyüğe sıralayın..." value={sequenceQuestion} onChange={e => setSequenceQuestion(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white mb-4" />
-             
-             <div className="flex gap-2"> 
-                <input placeholder="Sıralanacak öge..." value={tempSeq} onChange={e => setTempSeq(e.target.value)} className="flex-grow bg-slate-900 border border-slate-600 rounded p-2 text-white" /> 
-                <button onClick={() => { if(!tempSeq) return; setSequenceItems([...sequenceItems, tempSeq]); setTempSeq(''); }} className="bg-indigo-600 text-white px-4 rounded">Ekle</button> 
-             </div> 
-        </div>
-        <div className="space-y-2">{sequenceItems.map((item, idx) => (<div key={idx} className="bg-slate-800 p-3 rounded border border-slate-700 flex justify-between"><span className="text-white">{idx+1}. {item}</span><Trash2 onClick={() => setSequenceItems(sequenceItems.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>))}</div> 
-    </div> 
-  );
+  const renderSequenceEditor = () => {
+    const handleAddOrUpdateSeq = () => {
+        if(!tempSeq) return; 
+        if (editingItemIndex !== null) {
+            const updated = [...sequenceItems];
+            updated[editingItemIndex] = tempSeq;
+            setSequenceItems(updated);
+            setEditingItemIndex(null);
+        } else {
+            setSequenceItems([...sequenceItems, tempSeq]); 
+        }
+        setTempSeq('');
+    };
+
+    const loadSeqForEdit = (idx: number) => {
+        setTempSeq(sequenceItems[idx]);
+        setEditingItemIndex(idx);
+    };
+
+    return ( 
+        <div className="space-y-6"> 
+            <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                <label className="block text-sm text-gray-400 mb-2">Soru / Talimat (İsteğe bağlı)</label>
+                <input placeholder="Örn: Küçükten büyüğe sıralayın..." value={sequenceQuestion} onChange={e => setSequenceQuestion(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white mb-4" />
+                
+                <div className="flex gap-2"> 
+                    <input placeholder="Sıralanacak öge..." value={tempSeq} onChange={e => setTempSeq(e.target.value)} className="flex-grow bg-slate-900 border border-slate-600 rounded p-2 text-white" /> 
+                    {editingItemIndex !== null && <button onClick={() => { setEditingItemIndex(null); setTempSeq(''); }} className="bg-slate-600 text-white px-4 rounded">İptal</button>}
+                    <button onClick={handleAddOrUpdateSeq} className={`${editingItemIndex !== null ? 'bg-yellow-600' : 'bg-indigo-600'} text-white px-4 rounded`}>
+                        {editingItemIndex !== null ? <Check size={18}/> : 'Ekle'}
+                    </button> 
+                </div> 
+            </div>
+            <div className="space-y-2">
+                {sequenceItems.map((item, idx) => (
+                    <div key={idx} className={`bg-slate-800 p-3 rounded border flex justify-between ${editingItemIndex === idx ? 'border-yellow-500' : 'border-slate-700'}`}>
+                        <span className="text-white"><span className="text-gray-500 font-bold mr-2">{idx+1}.</span> {item}</span>
+                        <div className="flex space-x-2">
+                            <Edit onClick={() => loadSeqForEdit(idx)} className="text-blue-400 cursor-pointer" size={16} />
+                            <Trash2 onClick={() => setSequenceItems(sequenceItems.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/>
+                        </div>
+                    </div>
+                ))}
+            </div> 
+        </div> 
+    );
+  };
   
   const renderClozeEditor = () => ( <div className="bg-slate-800 p-4 rounded-lg border border-slate-700"><p className="text-gray-400 text-sm mb-2">Boşlukları [köşeli parantez] ile belirtin.</p><textarea rows={6} value={clozeText} onChange={e => setClozeText(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white font-mono" placeholder="Gökyüzü [mavi] renktedir."/></div> );
 
@@ -247,23 +431,33 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
                         ) : (
                             <div className="space-y-2 mb-4 text-left">
                                 {stages.map((stage, idx) => (
-                                    <div key={stage.id} className="p-3 bg-slate-700 rounded flex justify-between items-center">
-                                        <span className="text-white font-medium">{idx + 1}. {stage.type}</span>
-                                        <Trash2 onClick={() => setStages(stages.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/>
+                                    <div key={stage.id} className="p-3 bg-slate-700 rounded flex justify-between items-center group">
+                                        <div className="flex flex-col">
+                                            <span className="text-white font-medium">{idx + 1}. {stage.type}</span>
+                                            <span className="text-xs text-gray-400">{stage.title}</span>
+                                        </div>
+                                        <div className="flex space-x-2">
+                                            <button onClick={() => handleEditStage(idx)} className="p-2 bg-slate-600 rounded hover:bg-indigo-600 text-white transition-colors" title="Düzenle">
+                                                <Edit size={16} />
+                                            </button>
+                                            <button onClick={() => setStages(stages.filter((_, i) => i !== idx))} className="p-2 bg-slate-600 rounded hover:bg-red-600 text-white transition-colors" title="Sil">
+                                                <Trash2 size={16} />
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
                         )}
-                        <button onClick={() => setIsAddingStage(true)} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center justify-center w-full">
+                        <button onClick={() => { setIsAddingStage(true); clearInputs(); setEditingStageIndex(null); setCurrentStageType(GameType.QUIZ); }} className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-500 flex items-center justify-center w-full">
                             <ListPlus className="mr-2"/> Yeni Sahne Ekle
                         </button>
                     </div>
                 </>
             ) : (
-                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 animate-fade-in">
+                <div className="bg-slate-800 p-4 rounded-lg border border-slate-700 animate-fade-in relative">
                     <div className="flex justify-between items-center mb-4">
-                        <h3 className="text-white font-bold">Yeni Sahne Oluştur</h3>
-                        <button onClick={() => setIsAddingStage(false)} className="text-sm text-gray-400 hover:text-white">İptal</button>
+                        <h3 className="text-white font-bold">{editingStageIndex !== null ? 'Sahneyi Düzenle' : 'Yeni Sahne Oluştur'}</h3>
+                        <button onClick={() => { setIsAddingStage(false); clearInputs(); }} className="text-sm text-gray-400 hover:text-white">İptal</button>
                     </div>
                     
                     <label className="block text-sm text-gray-400 mb-2">Sahne Türü</label>
@@ -271,6 +465,7 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
                         value={currentStageType} 
                         onChange={(e) => setCurrentStageType(e.target.value as GameType)}
                         className="w-full bg-slate-900 border border-slate-600 rounded p-2 text-white mb-6"
+                        disabled={editingStageIndex !== null} // Disable type change when editing existing stage for simplicity
                     >
                         <option value={GameType.QUIZ}>Test</option>
                         <option value={GameType.MATCHING}>Eşleştirme</option>
@@ -284,8 +479,8 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
                         {renderActiveEditor(currentStageType)}
                     </div>
 
-                    <button onClick={handleAddStage} className="w-full bg-emerald-600 text-white py-2 rounded font-bold hover:bg-emerald-500">
-                        Sahneyi Kaydet ve Çık
+                    <button onClick={handleAddOrUpdateStage} className={`w-full ${editingStageIndex !== null ? 'bg-yellow-600 hover:bg-yellow-500' : 'bg-emerald-600 hover:bg-emerald-500'} text-white py-2 rounded font-bold`}>
+                        {editingStageIndex !== null ? 'Değişiklikleri Kaydet' : 'Sahneyi Kaydet ve Çık'}
                     </button>
                 </div>
             )}
