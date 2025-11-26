@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { GameModule, GameType } from '../types';
 
-const ITEMS_PER_PAGE = 5;
+const ITEMS_PER_PAGE = 8; // Increased slightly for better grid fill
 
 export const useGames = (userId?: string) => {
     const [publicGames, setPublicGames] = useState<GameModule[]>([]);
@@ -53,7 +53,7 @@ export const useGames = (userId?: string) => {
     };
 
     const fetchGames = useCallback(async (page = 0, query = '', reset = false) => {
-        // DEMO MODE
+        // DEMO MODE logic
         if (!isSupabaseConfigured()) {
             const localData = localStorage.getItem('demo_games');
             const demoGames: GameModule[] = localData ? JSON.parse(localData) : [];
@@ -96,11 +96,19 @@ export const useGames = (userId?: string) => {
                 .from('games')
                 .select('*, profiles(username)')
                 .eq('is_public', true)
-                .order('created_at', { ascending: false })
                 .range(from, to);
 
+            // Algorithm: 
+            // If searching, order by text match (default Supabase behavior + date).
+            // If NOT searching (Default view), order by Plays (Popularity) to show best content,
+            // but we will shuffle client-side to satisfy "mixed" requirement.
             if (query) {
-                queryBuilder = queryBuilder.or(`title.ilike.%${query}%,description.ilike.%${query}%`);
+                queryBuilder = queryBuilder.or(`title.ilike.%${query}%,description.ilike.%${query}%`)
+                                           .order('created_at', { ascending: false });
+            } else {
+                // Primary sort: Most played. Secondary: Newest.
+                queryBuilder = queryBuilder.order('plays', { ascending: false })
+                                           .order('created_at', { ascending: false });
             }
 
             const { data: publicData, error: pubError } = await queryBuilder;
@@ -112,6 +120,14 @@ export const useGames = (userId?: string) => {
                     ...mapDbToGame(g),
                     author: g.profiles?.username || g.author_name || 'Bilinmeyen'
                 }));
+
+                // Client-side shuffle for "Mixed" discovery feel on the main page (only if not searching)
+                if (!query && mappedGames.length > 0) {
+                     for (let i = mappedGames.length - 1; i > 0; i--) {
+                        const j = Math.floor(Math.random() * (i + 1));
+                        [mappedGames[i], mappedGames[j]] = [mappedGames[j], mappedGames[i]];
+                    }
+                }
 
                 if (reset) {
                     setPublicGames(mappedGames);

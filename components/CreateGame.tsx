@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameType, GameModule, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem, SequenceItem, ClozeItem, GameSettings, MixedStage, ScrambleItem } from '../types';
-import { Save, Trash2, ArrowLeft, Settings, Plus, Minus, X, Globe, Lock, Loader2, ListPlus, Edit, Check, Code, HelpCircle, FileJson } from 'lucide-react';
+import { Save, Trash2, ArrowLeft, Globe, Lock, Loader2, ListPlus, Edit, Check } from 'lucide-react';
 import { QuizEditor, MatchingEditor, SequenceEditor, ScrambleEditor } from './GameEditors';
 
 interface CreateGameProps {
@@ -11,7 +11,6 @@ interface CreateGameProps {
 }
 
 const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, userId }) => {
-  const [showSettings, setShowSettings] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -108,9 +107,16 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
       // Constraints
       if (['QUIZ', 'SEQUENCE', 'CLOZE'].includes(currentStageType)) {
           // Limit 1
-          if (currentStageType === GameType.QUIZ && quizItems.length !== 1) return alert("Bu modda sadece 1 soru ekleyebilirsiniz.");
-          if (currentStageType === GameType.SEQUENCE && sequenceItems.length < 2) return alert("Sıralama için en az 2 öge gerekir.");
-          if (currentStageType === GameType.CLOZE && (!clozeText.includes('[') || !clozeText.includes(']'))) return alert("En az bir boşluk tanımlayın.");
+          if (currentStageType === GameType.QUIZ) {
+              if (quizItems.length === 0) return alert("Lütfen en az bir soru oluşturun.");
+              if (quizItems.length > 1) return alert("Bu modda sadece 1 soru ekleyebilirsiniz.");
+          }
+          if (currentStageType === GameType.SEQUENCE) {
+              if (sequenceItems.length < 2) return alert("Sıralama için en az 2 öge gerekir.");
+          }
+          if (currentStageType === GameType.CLOZE) {
+              if (!clozeText.includes('[') || !clozeText.includes(']')) return alert("En az bir boşluk tanımlayın.");
+          }
       } else {
           // Limit 5
           const limit = 5;
@@ -199,20 +205,97 @@ const CreateGame: React.FC<CreateGameProps> = ({ onSave, onCancel, initialGame, 
   };
 
   const renderActiveEditor = () => {
+      // Helper for simple text inputs to submit on Ctrl+Enter
+      const handleKeyDownSimple = (e: React.KeyboardEvent, action: () => void) => {
+          if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              action();
+          }
+      };
+
       switch(currentStageType) {
           case GameType.QUIZ: return <QuizEditor items={quizItems} setItems={setQuizItems} />;
           case GameType.MATCHING: return <MatchingEditor pairs={matchingPairs} setPairs={setMatchingPairs} />;
           case GameType.SEQUENCE: return <SequenceEditor items={sequenceItems} setItems={setSequenceItems} question={sequenceQuestion} setQuestion={setSequenceQuestion}/>;
           case GameType.SCRAMBLE: return <ScrambleEditor items={scrambleItems} setItems={setScrambleItems}/>;
-          case GameType.CLOZE: return (<div className="bg-slate-800 p-4 rounded-lg border border-slate-700"><p className="text-gray-400 text-sm mb-2">Boşlukları [köşeli parantez] ile belirtin.</p><textarea rows={6} value={clozeText} onChange={e => setClozeText(e.target.value)} className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white font-mono" placeholder="Gökyüzü [mavi] renktedir."/></div>);
-          case GameType.TRUE_FALSE: return (<div className="space-y-4"><div className="bg-slate-800 p-4 rounded border border-slate-700"><input placeholder="İfade" value={tempTf.stmt} onChange={e => setTempTf({...tempTf, stmt: e.target.value})} className="w-full bg-slate-900 border border-slate-600 p-2 rounded text-white mb-2" /><div className="flex gap-4 mb-2"><label className="text-white"><input type="radio" className="mr-2" checked={tempTf.isTrue} onChange={() => setTempTf({...tempTf, isTrue: true})} />Doğru</label><label className="text-white"><input type="radio" className="mr-2" checked={!tempTf.isTrue} onChange={() => setTempTf({...tempTf, isTrue: false})} />Yanlış</label></div><button onClick={() => { if(tempTf.stmt) { if(tfItems.length>=5) return alert('Limit 5'); setTfItems([...tfItems, { statement: tempTf.stmt, isTrue: tempTf.isTrue }]); setTempTf({stmt:'', isTrue:true}); } }} className="w-full bg-indigo-600 text-white py-2 rounded">Ekle</button></div>{tfItems.map((item, idx) => <div key={idx} className="text-gray-300 flex justify-between bg-slate-800 border border-slate-700 p-2 rounded"><span>{item.statement}</span><Trash2 onClick={() => setTfItems(tfItems.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>)}</div>);
-          case GameType.FLASHCARD: return (<div className="space-y-4"><div className="flex gap-2"><input placeholder="Ön" value={tempFlash.f} onChange={e => setTempFlash({...tempFlash, f: e.target.value})} className="w-1/2 bg-slate-900 border border-slate-600 p-2 rounded text-white" /><input placeholder="Arka" value={tempFlash.b} onChange={e => setTempFlash({...tempFlash, b: e.target.value})} className="w-1/2 bg-slate-900 border border-slate-600 p-2 rounded text-white" /></div><button onClick={() => { if(tempFlash.f && tempFlash.b) { if(flashcards.length>=5) return alert('Limit 5'); setFlashcards([...flashcards, { front: tempFlash.f, back: tempFlash.b }]); setTempFlash({f:'', b:''}); } }} className="w-full bg-indigo-600 text-white py-2 rounded">Kart Ekle</button>{flashcards.map((item, idx) => <div key={idx} className="text-gray-300 flex justify-between bg-slate-800 border border-slate-700 p-2 rounded"><span>{item.front}</span><Trash2 onClick={() => setFlashcards(flashcards.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>)}</div>);
+          case GameType.CLOZE: return (
+              <div className="bg-slate-800 p-4 rounded-lg border border-slate-700">
+                  <p className="text-gray-400 text-sm mb-2">Boşlukları [köşeli parantez] ile belirtin.</p>
+                  <textarea 
+                    rows={6} 
+                    value={clozeText} 
+                    onChange={e => setClozeText(e.target.value)} 
+                    className="w-full bg-slate-900 border border-slate-600 rounded p-3 text-white font-mono" 
+                    placeholder="Gökyüzü [mavi] renktedir."
+                    onKeyDown={(e) => handleKeyDownSimple(e, saveStage)}
+                  />
+                  <p className="text-xs text-slate-500 mt-2">Kaydetmek için CTRL + Enter</p>
+              </div>
+          );
+          case GameType.TRUE_FALSE: return (
+            <div className="space-y-4">
+                <div className="bg-slate-800 p-4 rounded border border-slate-700">
+                    <input 
+                        placeholder="İfade" 
+                        value={tempTf.stmt} 
+                        onChange={e => setTempTf({...tempTf, stmt: e.target.value})} 
+                        className="w-full bg-slate-900 border border-slate-600 p-2 rounded text-white mb-2" 
+                        onKeyDown={(e) => handleKeyDownSimple(e, () => {
+                            if(tempTf.stmt) { 
+                                if(tfItems.length>=5) return alert('Limit 5'); 
+                                setTfItems([...tfItems, { statement: tempTf.stmt, isTrue: tempTf.isTrue }]); 
+                                setTempTf({stmt:'', isTrue:true}); 
+                            }
+                        })}
+                    />
+                    <div className="flex gap-4 mb-2">
+                        <label className="text-white flex items-center"><input type="radio" className="mr-2" checked={tempTf.isTrue} onChange={() => setTempTf({...tempTf, isTrue: true})} />Doğru</label>
+                        <label className="text-white flex items-center"><input type="radio" className="mr-2" checked={!tempTf.isTrue} onChange={() => setTempTf({...tempTf, isTrue: false})} />Yanlış</label>
+                    </div>
+                    <button onClick={() => { if(tempTf.stmt) { if(tfItems.length>=5) return alert('Limit 5'); setTfItems([...tfItems, { statement: tempTf.stmt, isTrue: tempTf.isTrue }]); setTempTf({stmt:'', isTrue:true}); } }} className="w-full bg-indigo-600 text-white py-2 rounded">Ekle</button>
+                </div>
+                {tfItems.map((item, idx) => <div key={idx} className="text-gray-300 flex justify-between bg-slate-800 border border-slate-700 p-2 rounded"><span>{item.statement}</span><Trash2 onClick={() => setTfItems(tfItems.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>)}
+            </div>
+          );
+          case GameType.FLASHCARD: return (
+            <div className="space-y-4">
+                <div className="flex gap-2">
+                    <input 
+                        placeholder="Ön" 
+                        value={tempFlash.f} 
+                        onChange={e => setTempFlash({...tempFlash, f: e.target.value})} 
+                        className="w-1/2 bg-slate-900 border border-slate-600 p-2 rounded text-white" 
+                        onKeyDown={(e) => handleKeyDownSimple(e, () => {
+                             if(tempFlash.f && tempFlash.b) { 
+                                if(flashcards.length>=5) return alert('Limit 5'); 
+                                setFlashcards([...flashcards, { front: tempFlash.f, back: tempFlash.b }]); 
+                                setTempFlash({f:'', b:''}); 
+                            } 
+                        })}
+                    />
+                    <input 
+                        placeholder="Arka" 
+                        value={tempFlash.b} 
+                        onChange={e => setTempFlash({...tempFlash, b: e.target.value})} 
+                        className="w-1/2 bg-slate-900 border border-slate-600 p-2 rounded text-white" 
+                        onKeyDown={(e) => handleKeyDownSimple(e, () => {
+                             if(tempFlash.f && tempFlash.b) { 
+                                if(flashcards.length>=5) return alert('Limit 5'); 
+                                setFlashcards([...flashcards, { front: tempFlash.f, back: tempFlash.b }]); 
+                                setTempFlash({f:'', b:''}); 
+                            } 
+                        })}
+                    />
+                </div>
+                <button onClick={() => { if(tempFlash.f && tempFlash.b) { if(flashcards.length>=5) return alert('Limit 5'); setFlashcards([...flashcards, { front: tempFlash.f, back: tempFlash.b }]); setTempFlash({f:'', b:''}); } }} className="w-full bg-indigo-600 text-white py-2 rounded">Kart Ekle</button>
+                {flashcards.map((item, idx) => <div key={idx} className="text-gray-300 flex justify-between bg-slate-800 border border-slate-700 p-2 rounded"><span>{item.front}</span><Trash2 onClick={() => setFlashcards(flashcards.filter((_, i) => i !== idx))} size={16} className="text-red-400 cursor-pointer"/></div>)}
+            </div>
+          );
           default: return null;
       }
   };
 
   return (
-    <div className="max-w-4xl mx-auto pb-10">
+    <div className="max-w-4xl mx-auto pb-10 px-2 sm:px-0">
       <div className="mb-8 text-center"><h1 className="text-3xl font-bold text-white">{initialGame ? 'Uygulamayı Düzenle' : 'Yeni Uygulama Oluştur'}</h1></div>
 
       <div className="bg-slate-800 rounded-2xl shadow-lg p-6 border border-slate-700 animate-fade-in mb-8">
