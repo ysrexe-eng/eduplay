@@ -1,5 +1,6 @@
-import React from 'react';
-import { User, Smartphone, LogOut } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Save, Loader2 } from 'lucide-react';
+import { useGames } from '../hooks/useGames';
 
 interface SettingsProps {
     session: any;
@@ -7,56 +8,66 @@ interface SettingsProps {
 }
 
 const Settings: React.FC<SettingsProps> = ({ session, onSignOut }) => {
-    const getQrCodeUrl = () => {
-        if (!session) return '';
-        // Construct the login URL for other devices
-        const baseUrl = window.location.origin;
-        // Use standard query parameters for robust parsing
-        const loginUrl = `${baseUrl}/?access_token=${session.access_token}&refresh_token=${session.refresh_token}&type=qr_login`;
-        // Encode for QR API
-        return `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(loginUrl)}`;
+    const { username, updateProfile } = useGames(session?.user?.id);
+    const [inputUsername, setInputUsername] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState('');
+
+    useEffect(() => {
+        if (username) setInputUsername(username);
+    }, [username]);
+
+    const handleSaveProfile = async () => {
+        if (!inputUsername.trim()) return;
+        setSaving(true);
+        try {
+            await updateProfile(inputUsername.trim());
+            setMsg('Kullanıcı adı güncellendi.');
+        } catch (e: any) {
+            setMsg('Hata: ' + e.message);
+        } finally {
+            setSaving(false);
+            setTimeout(() => setMsg(''), 3000);
+        }
     };
 
     return (
         <div className="max-w-2xl mx-auto space-y-8 animate-fade-in">
              <div className="text-center mb-8">
                 <h1 className="text-3xl font-bold text-white mb-2">Ayarlar</h1>
-                <p className="text-slate-400">Hesap ve cihaz yönetimi.</p>
+                <p className="text-slate-400">Hesap ve profil yönetimi.</p>
             </div>
 
             <div className="bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden">
                  <div className="p-6 border-b border-slate-700">
                      <h2 className="text-xl font-bold text-white flex items-center">
-                         <User className="w-5 h-5 mr-2 text-indigo-400"/> Hesap Bilgileri
+                         <User className="w-5 h-5 mr-2 text-indigo-400"/> Profil Bilgileri
                      </h2>
                  </div>
-                 <div className="p-6">
-                     <div className="mb-4">
+                 <div className="p-6 space-y-6">
+                     <div>
                          <label className="text-sm text-gray-400">E-posta Adresi</label>
-                         <p className="text-white font-medium text-lg">{session?.user?.email}</p>
+                         <p className="text-white font-medium text-lg bg-slate-900 p-3 rounded mt-1 opacity-50 cursor-not-allowed">{session?.user?.email}</p>
                      </div>
-                     <button onClick={onSignOut} className="px-4 py-2 border border-slate-600 text-gray-300 hover:text-white rounded hover:bg-slate-700 transition-colors flex items-center">
-                         <LogOut className="w-4 h-4 mr-2"/> Çıkış Yap
-                     </button>
-                 </div>
-            </div>
-
-            <div className="bg-slate-800 rounded-xl shadow-lg border border-slate-700 overflow-hidden">
-                 <div className="p-6 border-b border-slate-700">
-                     <h2 className="text-xl font-bold text-white flex items-center">
-                         <Smartphone className="w-5 h-5 mr-2 text-indigo-400"/> Başka Cihaz Bağla
-                     </h2>
-                 </div>
-                 <div className="p-6 flex flex-col items-center text-center">
-                     <p className="text-gray-300 mb-6">Başka bir cihazda veya telefonunda anında giriş yapmak için bu karekodu tarat.</p>
-                     
-                     <div className="bg-white p-4 rounded-lg shadow-inner mb-6">
-                         <img src={getQrCodeUrl()} alt="Login QR Code" className="w-48 h-48" />
+                     <div>
+                         <label className="text-sm text-gray-400">Kullanıcı Adı (Herkese Açık)</label>
+                         <div className="flex space-x-2 mt-1">
+                             <input 
+                                value={inputUsername}
+                                onChange={(e) => setInputUsername(e.target.value)}
+                                className="flex-grow bg-slate-900 border border-slate-600 rounded p-3 text-white focus:border-indigo-500 outline-none"
+                                placeholder="Kullanıcı adı belirle..."
+                             />
+                             <button 
+                                onClick={handleSaveProfile}
+                                disabled={saving}
+                                className="bg-indigo-600 text-white px-6 rounded font-bold hover:bg-indigo-500 disabled:opacity-50"
+                             >
+                                 {saving ? <Loader2 className="animate-spin"/> : <Save size={20}/>}
+                             </button>
+                         </div>
+                         {msg && <p className={`text-sm mt-2 ${msg.includes('Hata') ? 'text-red-400' : 'text-emerald-400'}`}>{msg}</p>}
                      </div>
-                     
-                     <p className="text-xs text-yellow-500/80 max-w-sm">
-                         Uyarı: Bu karekodu başkalarıyla paylaşmayın. Hesabınıza tam erişim sağlar.
-                     </p>
                  </div>
             </div>
         </div>

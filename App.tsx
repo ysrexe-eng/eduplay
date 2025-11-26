@@ -18,7 +18,6 @@ const App: React.FC = () => {
   const [isAuthChecking, setIsAuthChecking] = useState(true);
   const [authMode, setAuthMode] = useState<'signin' | 'signup' | 'forgot' | 'update_password'>('signin');
 
-  // Use custom hook for data management
   const { 
     publicGames, 
     myGames, 
@@ -35,23 +34,6 @@ const App: React.FC = () => {
   useEffect(() => {
     const checkSession = async () => {
         const params = new URLSearchParams(window.location.search);
-        
-        // Handle QR Login
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        const type = params.get('type');
-
-        if (accessToken && refreshToken && type === 'qr_login' && supabase) {
-             const { error } = await (supabase.auth as any).setSession({
-                 access_token: accessToken,
-                 refresh_token: refreshToken
-             });
-             if (!error) {
-                 window.history.replaceState({}, document.title, window.location.pathname);
-             } else {
-                 console.error("QR Login Error:", error);
-             }
-        }
         
         if (params.get('view') === 'reset' || window.location.hash.includes('type=recovery')) {
              setView('auth');
@@ -77,6 +59,7 @@ const App: React.FC = () => {
                 } else if (event === 'SIGNED_IN') {
                     if (view === 'auth') setView('home');
                 } else if (event === 'SIGNED_OUT') {
+                    setSession(null);
                     setAuthMode('signin');
                 }
             });
@@ -106,7 +89,7 @@ const App: React.FC = () => {
   };
 
   const handleDeleteAccount = async () => {
-      const confirmMsg = "Hesabınızı silmek istediğinizden emin misiniz?\n\nTüm oyunlarınız, beğenileriniz ve verileriniz KALICI OLARAK SİLİNECEKTİR. Bu işlem geri alınamaz.";
+      const confirmMsg = "Hesabınızı silmek istediğinizden emin misiniz?\n\nTüm oyunlarınız ve verileriniz KALICI OLARAK SİLİNECEKTİR. Bu işlem geri alınamaz.";
       if(window.confirm(confirmMsg)) {
           if(window.confirm("Lütfen son kez onaylayın: Her şeyi sil?")) {
               try {
@@ -114,6 +97,7 @@ const App: React.FC = () => {
                   if (supabase) {
                       await (supabase.auth as any).signOut();
                   }
+                  setSession(null);
                   setView('auth');
                   setAuthMode('signin');
               } catch(e: any) {
@@ -121,6 +105,12 @@ const App: React.FC = () => {
               }
           }
       }
+  };
+
+  const handleLogout = () => {
+      setSession(null);
+      setAuthMode('signin');
+      setView('auth');
   };
 
   const handlePlayGame = (game: GameModule) => {
@@ -205,7 +195,7 @@ const App: React.FC = () => {
 
     switch (view) {
       case 'settings':
-          return <Settings session={session} onSignOut={async () => { if(supabase) await (supabase.auth as any).signOut(); }} />;
+          return <Settings session={session} onSignOut={handleLogout} />;
       case 'create':
         return (
           <CreateGame 
@@ -300,6 +290,7 @@ const App: React.FC = () => {
         }} 
         session={session} 
         onDeleteAccount={handleDeleteAccount}
+        onLogout={handleLogout}
       />
       
       {!isSupabaseConfigured() && (

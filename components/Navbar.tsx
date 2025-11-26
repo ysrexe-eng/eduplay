@@ -7,9 +7,10 @@ interface NavbarProps {
   onChangeView: (view: string) => void;
   session: any;
   onDeleteAccount?: () => void;
+  onLogout?: () => void;
 }
 
-const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onDeleteAccount }) => {
+const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onDeleteAccount, onLogout }) => {
   const [showDropdown, setShowDropdown] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -18,6 +19,8 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
       if (supabase) {
           await (supabase.auth as any).signOut();
       }
+      // Explicitly call the parent logout handler to clear state properly
+      if (onLogout) onLogout();
   };
 
   const handleDelete = () => {

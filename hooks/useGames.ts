@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 import { GameModule, GameType } from '../types';
 
-const ITEMS_PER_PAGE = 12;
+const ITEMS_PER_PAGE = 5;
 
 export const useGames = (userId?: string) => {
     const [publicGames, setPublicGames] = useState<GameModule[]>([]);
@@ -11,8 +11,8 @@ export const useGames = (userId?: string) => {
     const [hasMorePublic, setHasMorePublic] = useState(true);
     const [publicPage, setPublicPage] = useState(0);
     const [searchQuery, setSearchQuery] = useState('');
-    
-    // Helper to map DB columns to our Typescript Interface
+    const [username, setUsername] = useState('');
+
     const mapDbToGame = (dbGame: any): GameModule => ({
         id: dbGame.id,
         title: dbGame.title,
@@ -24,11 +24,34 @@ export const useGames = (userId?: string) => {
         author: dbGame.author_name || 'Anonymous',
         author_id: dbGame.author_id,
         plays: dbGame.plays,
-        likes: dbGame.likes,
         isPublic: dbGame.is_public
     });
 
-    // 1. Fetch Games Function (Paginated & Searchable)
+    // Fetch User Profile
+    const fetchProfile = useCallback(async () => {
+        if (!userId || !supabase) return;
+        const { data, error } = await supabase
+            .from('profiles')
+            .select('username')
+            .eq('id', userId)
+            .single();
+        
+        if (data) setUsername(data.username);
+    }, [userId]);
+
+    useEffect(() => {
+        fetchProfile();
+    }, [fetchProfile]);
+
+    const updateProfile = async (newUsername: string) => {
+        if (!userId || !supabase) return;
+        const { error } = await supabase
+            .from('profiles')
+            .upsert({ id: userId, username: newUsername });
+        if (error) throw error;
+        setUsername(newUsername);
+    };
+
     const fetchGames = useCallback(async (page = 0, query = '', reset = false) => {
         // DEMO MODE
         if (!isSupabaseConfigured()) {
@@ -44,7 +67,6 @@ export const useGames = (userId?: string) => {
                 );
             }
 
-            // Simple client-side pagination simulation
             const start = page * ITEMS_PER_PAGE;
             const end = start + ITEMS_PER_PAGE;
             const slice = filtered.slice(start, end);
@@ -61,7 +83,6 @@ export const useGames = (userId?: string) => {
             return;
         }
 
-        // SUPABASE MODE
         if (!supabase) return;
 
         if (reset) setLoading(true);
@@ -70,10 +91,10 @@ export const useGames = (userId?: string) => {
             const from = page * ITEMS_PER_PAGE;
             const to = from + ITEMS_PER_PAGE - 1;
 
-            // A. Fetch Public Games
+            // Fetch Public Games with Author Username lookup
             let queryBuilder = supabase
                 .from('games')
-                .select('*')
+                .select('*, profiles(username)')
                 .eq('is_public', true)
                 .order('created_at', { ascending: false })
                 .range(from, to);
@@ -87,12 +108,15 @@ export const useGames = (userId?: string) => {
             if (pubError) {
                 console.error("Error fetching public games:", pubError);
             } else if (publicData) {
-                const mappedGames = publicData.map(mapDbToGame);
+                const mappedGames = publicData.map(g => ({
+                    ...mapDbToGame(g),
+                    author: g.profiles?.username || g.author_name || 'Bilinmeyen'
+                }));
+
                 if (reset) {
                     setPublicGames(mappedGames);
                 } else {
                     setPublicGames(prev => {
-                        // Avoid duplicates if realtime pushed something that pagination also fetched
                         const existingIds = new Set(prev.map(p => p.id));
                         const newUnique = mappedGames.filter(g => !existingIds.has(g.id));
                         return [...prev, ...newUnique];
@@ -101,8 +125,7 @@ export const useGames = (userId?: string) => {
                 setHasMorePublic(publicData.length === ITEMS_PER_PAGE);
             }
 
-            // B. Fetch My Games (if logged in) - Fetch all for now or separate pagination later
-            // For "My Games", we usually want to see them all, but let's just fetch recent ones
+            // Fetch My Games
             if (userId && reset) {
                 let myQuery = supabase
                     .from('games')
@@ -131,7 +154,6 @@ export const useGames = (userId?: string) => {
         }
     }, [userId]);
 
-    // Initial Load & Search change
     useEffect(() => {
         setPublicPage(0);
         fetchGames(0, searchQuery, true);
@@ -147,63 +169,9 @@ export const useGames = (userId?: string) => {
         setSearchQuery(query);
     };
 
-    // 2. Realtime Subscription Setup
-    useEffect(() => {
-        if (!isSupabaseConfigured() || !supabase) return;
-
-        const channel = supabase
-            .channel('public:games')
-            .on(
-                'postgres_changes', 
-                { event: '*', schema: 'public', table: 'games' }, 
-                (payload) => {
-                    const newGame = payload.new ? mapDbToGame(payload.new) : null;
-                    const oldGameId = payload.old ? (payload.old as any).id : null;
-
-                    if (payload.eventType === 'INSERT' && newGame) {
-                        // Only add if it matches current search
-                        const matchesSearch = !searchQuery || 
-                            newGame.title.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                            newGame.description.toLowerCase().includes(searchQuery.toLowerCase());
-
-                        if (matchesSearch) {
-                            if (newGame.isPublic) {
-                                setPublicGames(prev => [newGame, ...prev]);
-                            }
-                            if (userId && newGame.author_id === userId) {
-                                setMyGames(prev => [newGame, ...prev]);
-                            }
-                        }
-                    } else if (payload.eventType === 'UPDATE' && newGame) {
-                         setPublicGames(prev => {
-                            if (newGame.isPublic) {
-                                const exists = prev.some(g => g.id === newGame.id);
-                                return exists 
-                                    ? prev.map(g => g.id === newGame.id ? newGame : g) 
-                                    : [newGame, ...prev]; 
-                            } else {
-                                return prev.filter(g => g.id !== newGame.id);
-                            }
-                        });
-                        if (userId) {
-                            setMyGames(prev => prev.map(g => g.id === newGame.id ? newGame : g));
-                        }
-                    } else if (payload.eventType === 'DELETE' && oldGameId) {
-                        setPublicGames(prev => prev.filter(g => g.id !== oldGameId));
-                        setMyGames(prev => prev.filter(g => g.id !== oldGameId));
-                    }
-                }
-            )
-            .subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, [userId, searchQuery]);
-
-    // 3. Save Function
     const saveGame = async (gameData: Partial<GameModule>, isEdit: boolean): Promise<GameModule> => {
-        // DEMO MODE SAVE
+        const authorName = username || 'Anonymous';
+
         if (!isSupabaseConfigured() || !supabase) {
             const localData = localStorage.getItem('demo_games');
             let demoGames: GameModule[] = localData ? JSON.parse(localData) : [];
@@ -212,9 +180,8 @@ export const useGames = (userId?: string) => {
                 ...gameData as GameModule,
                 id: isEdit ? gameData.id! : `demo-${Date.now()}`,
                 plays: gameData.plays || 0,
-                likes: gameData.likes || 0,
                 author_id: userId || 'demo-user',
-                author: 'You'
+                author: authorName
             };
 
             if (isEdit) {
@@ -224,7 +191,7 @@ export const useGames = (userId?: string) => {
             }
 
             localStorage.setItem('demo_games', JSON.stringify(demoGames));
-            setMyGames(demoGames.filter(g => g.author_id === (userId || 'demo-user'))); // Update local state immediately
+            setMyGames(demoGames.filter(g => g.author_id === (userId || 'demo-user')));
             return newGame;
         }
 
@@ -236,7 +203,7 @@ export const useGames = (userId?: string) => {
             settings: gameData.settings,
             author_id: userId,
             is_public: gameData.isPublic,
-            author_name: gameData.author
+            author_name: authorName
         };
 
         let result;
@@ -262,7 +229,6 @@ export const useGames = (userId?: string) => {
         return mapDbToGame(result);
     };
 
-    // 4. Delete Function
     const deleteGame = async (id: string) => {
         if (!isSupabaseConfigured() || !supabase) {
             const localData = localStorage.getItem('demo_games');
@@ -276,39 +242,23 @@ export const useGames = (userId?: string) => {
             return;
         }
 
-        const { error: likeError } = await supabase.from('likes').delete().eq('game_id', id);
-        if (likeError) console.warn("Error cleaning up likes:", likeError.message);
-
         const { error } = await supabase.from('games').delete().eq('id', id);
         if (error) throw error;
+        
+        setMyGames(prev => prev.filter(g => g.id !== id));
+        setPublicGames(prev => prev.filter(g => g.id !== id));
     };
 
-    // 5. Delete All User Data
     const deleteAllUserData = async () => {
         if (!isSupabaseConfigured() || !supabase || !userId) {
-            const localData = localStorage.getItem('demo_games');
-            if (localData) {
-                const demoGames: GameModule[] = JSON.parse(localData);
-                const filtered = demoGames.filter(g => g.author_id !== 'demo-user');
-                localStorage.setItem('demo_games', JSON.stringify(filtered));
-                setMyGames([]);
-            }
+            localStorage.removeItem('demo_games');
+            setMyGames([]);
             return;
         }
 
-        try {
-            await supabase.from('likes').delete().eq('user_id', userId);
-            
-            const { data: userGames } = await supabase.from('games').select('id').eq('author_id', userId);
-            if (userGames && userGames.length > 0) {
-                const gameIds = userGames.map(g => g.id);
-                await supabase.from('likes').delete().in('game_id', gameIds);
-                await supabase.from('games').delete().in('id', gameIds);
-            }
-        } catch (error) {
-            console.error("Error deleting user data:", error);
-            throw error;
-        }
+        await supabase.from('games').delete().eq('author_id', userId);
+        // Cascading deletes on Auth user removal is handled by DB usually, 
+        // but here we just clear data as requested
     };
 
     return {
@@ -321,6 +271,8 @@ export const useGames = (userId?: string) => {
         searchQuery,
         saveGame,
         deleteGame,
-        deleteAllUserData
+        deleteAllUserData,
+        username,
+        updateProfile
     };
 };

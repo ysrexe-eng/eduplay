@@ -5,17 +5,23 @@ export enum GameType {
   FLASHCARD = 'FLASHCARD',
   SEQUENCE = 'SEQUENCE',
   CLOZE = 'CLOZE',
-  MIXED = 'MIXED' // New type for combined games
+  SCRAMBLE = 'SCRAMBLE', // New Mode
+  MIXED = 'MIXED'
 }
 
 export interface GameSettings {
-  timeLimit?: number; // in seconds, 0 for no limit
+  timeLimit?: number; 
   randomizeOrder?: boolean;
   allowRetry?: boolean;
-  caseSensitive?: boolean; // for cloze
+  caseSensitive?: boolean;
 }
 
-// Data structures for different game types
+export interface UserProfile {
+  id: string;
+  username: string;
+}
+
+// Data structures
 export interface QuizItem {
   question: string;
   options: string[];
@@ -43,23 +49,26 @@ export interface FlashcardItem {
 export interface SequenceItem {
   id: string;
   text: string;
-  order: number; // 0 is first, etc.
+  order: number;
 }
 
 export interface ClozeItem {
-  textParts: string[]; // ["The sky is ", " and the grass is ", "."]
-  answers: string[];   // ["blue", "green"]
+  textParts: string[];
+  answers: string[];
 }
 
-// Wrapper for a single stage in a Mixed game
+export interface ScrambleItem {
+  word: string;
+  hint?: string;
+}
+
 export interface MixedStage {
   id: string;
   type: GameType;
   title?: string;
-  data: GameData; // Recursive definition
+  data: GameData; 
 }
 
-// Union type for game data
 export type GameData = 
   | { type: GameType.QUIZ; items: QuizItem[] }
   | { type: GameType.MATCHING; pairs: MatchingPair[] }
@@ -67,19 +76,19 @@ export type GameData =
   | { type: GameType.FLASHCARD; items: FlashcardItem[] }
   | { type: GameType.SEQUENCE; items: SequenceItem[]; question?: string }
   | { type: GameType.CLOZE; data: ClozeItem }
+  | { type: GameType.SCRAMBLE; items: ScrambleItem[] }
   | { type: GameType.MIXED; stages: MixedStage[] };
 
 export interface GameModule {
-  id: string; // UUID from supabase
+  id: string;
   title: string;
   description: string;
   category: string;
   gameType: GameType;
   data: GameData;
   settings: GameSettings;
-  author: string;
-  author_id?: string; // Supabase User ID
+  author: string; // Display name (legacy or fallback)
+  author_id?: string;
   plays: number;
-  likes: number; // Added for community features
-  isPublic: boolean; // Added for community features
+  isPublic: boolean;
 }
