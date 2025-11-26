@@ -36,10 +36,11 @@ const App: React.FC = () => {
                  refresh_token: refreshToken
              });
              if (!error) {
-                 // Clean URL
+                 // Clean URL without reloading
                  window.history.replaceState({}, document.title, window.location.pathname);
-                 setIsAuthChecking(false);
-                 return; // Let subscription handle the rest
+                 // Session logic below will pick this up
+             } else {
+                 console.error("QR Login Error:", error);
              }
         }
         
@@ -69,13 +70,10 @@ const App: React.FC = () => {
                     setAuthMode('update_password');
                     setView('auth');
                 } else if (event === 'SIGNED_IN') {
-                    // Only redirect if we are not in recovery flow
-                    if (authMode !== 'update_password') {
-                        // If we were in auth view, go to home
-                        if (view === 'auth') setView('home');
-                    }
+                    // Stay on current view or go to home if in auth
+                    if (view === 'auth') setView('home');
                 } else if (event === 'SIGNED_OUT') {
-                    setView('auth');
+                    // Don't force auth view, just update session state
                     setAuthMode('signin');
                 }
             });
@@ -95,20 +93,20 @@ const App: React.FC = () => {
   };
 
   const handleDeleteGame = async (id: string) => {
-      if(window.confirm("Are you sure you want to delete this app?")) {
+      if(window.confirm("Bu uygulamayı silmek istediğinizden emin misiniz?")) {
           try {
               await deleteGame(id);
           } catch(e: any) {
-              alert("Error deleting game: " + e.message);
+              alert("Silme hatası: " + e.message);
           }
       }
   };
 
   const handleDeleteAccount = async () => {
-      const confirmMsg = "Are you sure you want to delete your account?\n\nThis will PERMANENTLY DELETE all your games, likes, and data. This action cannot be undone.";
+      const confirmMsg = "Hesabınızı silmek istediğinizden emin misiniz?\n\nTüm oyunlarınız, beğenileriniz ve verileriniz KALICI OLARAK SİLİNECEKTİR. Bu işlem geri alınamaz.";
       if(window.confirm(confirmMsg)) {
           // Double confirm
-          if(window.confirm("Please confirm one last time: Delete everything?")) {
+          if(window.confirm("Lütfen son kez onaylayın: Her şeyi sil?")) {
               try {
                   await deleteAllUserData();
                   if (supabase) {
@@ -117,7 +115,7 @@ const App: React.FC = () => {
                   setView('auth');
                   setAuthMode('signin');
               } catch(e: any) {
-                  alert("Error deleting account: " + e.message);
+                  alert("Hesap silme hatası: " + e.message);
               }
           }
       }
@@ -135,8 +133,8 @@ const App: React.FC = () => {
           return (
             <div className="text-center py-20 bg-slate-800 rounded-xl border border-slate-700 border-dashed">
                 <Search className="mx-auto h-12 w-12 text-slate-600 mb-4" />
-                <h3 className="text-lg font-medium text-white">No apps found</h3>
-                <p className="text-slate-400 mt-2">Be the first to create one!</p>
+                <h3 className="text-lg font-medium text-white">Uygulama bulunamadı</h3>
+                <p className="text-slate-400 mt-2">İlk oluşturan sen ol!</p>
             </div>
           );
       }
@@ -167,20 +165,23 @@ const App: React.FC = () => {
         return <Auth onSuccess={() => { setAuthMode('signin'); setView('home'); }} initialMode="update_password" />;
     }
 
-    if (!session && view === 'auth') {
-        return <Auth onSuccess={(user) => {
+    // If not logged in and explicitly trying to create or access settings
+    if (!session && (view === 'create' || view === 'settings')) {
+         return <Auth onSuccess={(user) => {
             setSession(user ? { user } : null);
-            setView('home');
+            setView(view); // Stay on target view
         }} initialMode={authMode} />;
     }
 
-    switch (view) {
-      case 'auth':
+    if (view === 'auth') {
           return <Auth onSuccess={() => { setView('home'); }} initialMode={authMode} />;
+    }
+
+    switch (view) {
       case 'settings':
-          return session ? <Settings session={session} onSignOut={async () => { if(supabase) await (supabase.auth as any).signOut(); }} /> : <Auth onSuccess={() => setView('settings')} />;
+          return <Settings session={session} onSignOut={async () => { if(supabase) await (supabase.auth as any).signOut(); }} />;
       case 'create':
-        return session ? (
+        return (
           <CreateGame 
             onSave={handleSaveGame} 
             onCancel={() => {
@@ -190,9 +191,9 @@ const App: React.FC = () => {
             initialGame={editingGame}
             userId={session.user.id}
           />
-        ) : <Auth onSuccess={() => setView('create')}/>;
+        );
       case 'play':
-        if (!activeGame) return <div>Error: No game selected</div>;
+        if (!activeGame) return <div>Hata: Oyun seçilmedi</div>;
         return (
           <GamePlayer 
             game={activeGame} 
@@ -203,38 +204,56 @@ const App: React.FC = () => {
          return (
              <div className="space-y-8 animate-fade-in">
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-white mb-2">Community Apps</h1>
-                    <p className="text-slate-400">Explore educational games created by others.</p>
+                    <h1 className="text-3xl font-bold text-white mb-2">Topluluk Uygulamaları</h1>
+                    <p className="text-slate-400">Başkaları tarafından oluşturulan eğitici oyunları keşfet.</p>
                 </div>
                 {renderGameGrid(publicGames)}
              </div>
          );
       case 'home':
       default:
-        if (!session && !isAuthChecking) {
-             return <Auth onSuccess={() => setView('home')} initialMode="signin" />;
+        // Default View: Show My Apps if logged in, otherwise just a welcome or empty state (or force community)
+        if (!session) {
+             // If not logged in, show Community by default or a landing page
+             return (
+                 <div className="space-y-8 animate-fade-in">
+                    <div className="text-center py-10">
+                        <h1 className="text-4xl font-bold text-white mb-4">EduPlay TR'ye Hoş Geldiniz</h1>
+                        <p className="text-xl text-slate-300 mb-8">Kendi eğitici oyunlarını oluştur, paylaş ve oyna.</p>
+                        <div className="flex justify-center space-x-4">
+                            <button onClick={() => setView('community')} className="px-6 py-3 bg-indigo-600 rounded-lg text-white font-bold hover:bg-indigo-500">Keşfetmeye Başla</button>
+                            <button onClick={() => setView('auth')} className="px-6 py-3 bg-slate-700 rounded-lg text-white font-bold hover:bg-slate-600">Giriş Yap</button>
+                        </div>
+                    </div>
+                    <div>
+                         <h2 className="text-2xl font-bold text-white mb-6">Popüler Uygulamalar</h2>
+                         {renderGameGrid(publicGames)}
+                    </div>
+                 </div>
+             );
         }
+        
         return (
           <div className="space-y-8 animate-fade-in">
             <div className="flex flex-col md:flex-row justify-between items-center bg-gradient-to-r from-indigo-900 to-slate-800 rounded-2xl p-8 text-white shadow-2xl relative overflow-hidden border border-slate-700">
                 <div className="relative z-10 max-w-xl">
-                   <h1 className="text-3xl font-bold mb-4">My Dashboard</h1>
+                   <h1 className="text-3xl font-bold mb-4">Panelim</h1>
                    <p className="text-slate-300 mb-6 text-lg">
-                     Manage your educational modules.
+                     Eğitim modüllerini yönet.
                    </p>
                    <button 
                      onClick={() => { setEditingGame(null); setView('create'); }}
                      className="bg-indigo-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-indigo-500 transition-colors flex items-center shadow-md ring-1 ring-white/10"
                    >
                      <PlusCircle className="mr-2 h-5 w-5" />
-                     Create New App
+                     Yeni Uygulama Oluştur
                    </button>
                 </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-6">
-                 <h2 className="text-xl font-bold text-white">My Apps</h2>
+                 <h2 className="text-xl font-bold text-white">Uygulamalarım</h2>
               </div>
               {renderGameGrid(myGames)}
             </div>
@@ -258,7 +277,7 @@ const App: React.FC = () => {
       
       {!isSupabaseConfigured() && (
           <div className="bg-yellow-600/20 border-b border-yellow-600/50 text-yellow-200 text-xs text-center py-1">
-              Demo Mode: Database not connected. Changes are saved to browser local storage.
+              Demo Modu: Veritabanı bağlı değil. Değişiklikler tarayıcı hafızasına kaydedilir.
           </div>
       )}
 
@@ -268,7 +287,7 @@ const App: React.FC = () => {
       <footer className="bg-slate-900 border-t border-slate-800 mt-auto">
         <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
           <p className="text-center text-slate-500 text-sm">
-            © {new Date().getFullYear()} EduPlay Creator.
+            © {new Date().getFullYear()} EduPlay TR.
           </p>
         </div>
       </footer>

@@ -42,7 +42,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
           <div className="flex items-center cursor-pointer" onClick={() => onChangeView('home')}>
             <div className="flex-shrink-0 flex items-center text-indigo-400">
               <Gamepad2 className="h-8 w-8 mr-2" />
-              <span className="font-bold text-xl tracking-tight text-white hidden sm:block">EduPlay</span>
+              <span className="font-bold text-xl tracking-tight text-white hidden sm:block">EduPlay TR</span>
             </div>
           </div>
           
@@ -52,7 +52,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
               className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'home' ? 'bg-slate-800 text-indigo-400' : 'text-gray-300 hover:bg-slate-800 hover:text-white'}`}
             >
               <Home className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">My Apps</span>
+              <span className="hidden sm:inline">Uygulamalarım</span>
             </button>
             
             <button 
@@ -60,7 +60,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
               className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'community' ? 'bg-slate-800 text-indigo-400' : 'text-gray-300 hover:bg-slate-800 hover:text-white'}`}
             >
               <Globe className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Community</span>
+              <span className="hidden sm:inline">Topluluk</span>
             </button>
 
             {session ? (
@@ -70,7 +70,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
                     className={`flex items-center px-3 py-2 rounded-md text-sm font-medium transition-colors ${currentView === 'create' ? 'bg-indigo-600 text-white shadow-md hover:bg-indigo-500' : 'bg-indigo-600 text-white hover:bg-indigo-500'}`}
                     >
                     <PlusCircle className="h-4 w-4 mr-2" />
-                    <span className="hidden sm:inline">Create</span>
+                    <span className="hidden sm:inline">Oluştur</span>
                     </button>
                     
                     {/* User Dropdown */}
@@ -86,26 +86,26 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
                         {showDropdown && (
                             <div className="absolute right-0 mt-2 w-48 bg-slate-800 rounded-md shadow-lg py-1 border border-slate-700 ring-1 ring-black ring-opacity-5 animate-fade-in origin-top-right">
                                 <div className="px-4 py-2 border-b border-slate-700">
-                                    <p className="text-xs text-gray-500">Signed in as</p>
+                                    <p className="text-xs text-gray-500">Giriş yapıldı</p>
                                     <p className="text-sm font-medium text-white truncate">{session.user.email}</p>
                                 </div>
                                 <button
                                     onClick={() => { onChangeView('settings'); setShowDropdown(false); }}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white flex items-center"
                                 >
-                                    <Settings className="h-4 w-4 mr-2" /> Settings
+                                    <Settings className="h-4 w-4 mr-2" /> Ayarlar
                                 </button>
                                 <button
                                     onClick={handleSignOut}
                                     className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-slate-700 hover:text-white flex items-center"
                                 >
-                                    <LogOut className="h-4 w-4 mr-2" /> Sign Out
+                                    <LogOut className="h-4 w-4 mr-2" /> Çıkış Yap
                                 </button>
                                 <button
                                     onClick={handleDelete}
                                     className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-900/20 hover:text-red-300 flex items-center border-t border-slate-700 mt-1"
                                 >
-                                    <Trash2 className="h-4 w-4 mr-2" /> Delete Account
+                                    <Trash2 className="h-4 w-4 mr-2" /> Hesabı Sil
                                 </button>
                             </div>
                         )}
@@ -117,7 +117,7 @@ const Navbar: React.FC<NavbarProps> = ({ currentView, onChangeView, session, onD
                     className="flex items-center px-3 py-2 rounded-md text-sm font-medium bg-slate-800 text-white hover:bg-slate-700 border border-slate-600"
                 >
                     <User className="h-4 w-4 mr-2" />
-                    Sign In
+                    Giriş Yap
                 </button>
             )}
           </div>

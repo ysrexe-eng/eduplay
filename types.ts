@@ -4,7 +4,8 @@ export enum GameType {
   TRUE_FALSE = 'TRUE_FALSE',
   FLASHCARD = 'FLASHCARD',
   SEQUENCE = 'SEQUENCE',
-  CLOZE = 'CLOZE'
+  CLOZE = 'CLOZE',
+  MIXED = 'MIXED' // New type for combined games
 }
 
 export interface GameSettings {
@@ -50,6 +51,14 @@ export interface ClozeItem {
   answers: string[];   // ["blue", "green"]
 }
 
+// Wrapper for a single stage in a Mixed game
+export interface MixedStage {
+  id: string;
+  type: GameType;
+  title?: string;
+  data: GameData; // Recursive definition
+}
+
 // Union type for game data
 export type GameData = 
   | { type: GameType.QUIZ; items: QuizItem[] }
@@ -57,7 +66,8 @@ export type GameData =
   | { type: GameType.TRUE_FALSE; items: TrueFalseItem[] }
   | { type: GameType.FLASHCARD; items: FlashcardItem[] }
   | { type: GameType.SEQUENCE; items: SequenceItem[]; question?: string }
-  | { type: GameType.CLOZE; data: ClozeItem }; 
+  | { type: GameType.CLOZE; data: ClozeItem }
+  | { type: GameType.MIXED; stages: MixedStage[] };
 
 export interface GameModule {
   id: string; // UUID from supabase

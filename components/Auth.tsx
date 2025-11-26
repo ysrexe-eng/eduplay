@@ -44,7 +44,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                     redirectTo: window.location.origin + '/?view=reset', // Handle reset flow
                 });
                 if (error) throw error;
-                setMsg('Check your email for the password reset link.');
+                setMsg('Şifre sıfırlama bağlantısı e-postanıza gönderildi.');
                 setIsSuccess(true);
             } else if (mode === 'signup') {
                 const { error } = await (supabase.auth as any).signUp({
@@ -52,7 +52,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                     password,
                 });
                 if (error) throw error;
-                setMsg('Registration successful! Check your email to confirm.');
+                setMsg('Kayıt başarılı! Onaylamak için e-postanızı kontrol edin.');
                 setIsSuccess(true);
                 setMode('signin');
             } else if (mode === 'update_password') {
@@ -60,7 +60,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                     password: password
                 });
                 if (error) throw error;
-                setMsg('Password updated successfully!');
+                setMsg('Şifre başarıyla güncellendi!');
                 setIsSuccess(true);
                 setTimeout(() => {
                     onSuccess();
@@ -75,7 +75,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
             }
         } catch (error: any) {
             console.error("Auth error:", error);
-            setMsg(error.message || "An unexpected error occurred");
+            setMsg(error.message || "Beklenmeyen bir hata oluştu");
             setIsSuccess(false);
         } finally {
             setLoading(false);
@@ -87,14 +87,14 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
             <div className="max-w-md mx-auto mt-20 bg-slate-800 p-8 rounded-2xl shadow-2xl border border-yellow-600/50">
                 <div className="text-center">
                     <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-                    <h2 className="text-2xl font-bold text-white mb-2">Demo Mode</h2>
-                    <p className="text-slate-400 mb-6">Database connection is not configured. You can use the app in offline demo mode.</p>
+                    <h2 className="text-2xl font-bold text-white mb-2">Demo Modu</h2>
+                    <p className="text-slate-400 mb-6">Veritabanı bağlantısı yapılandırılmamış. Uygulamayı çevrimdışı demo modunda kullanabilirsiniz.</p>
                     <button 
                         onClick={handleAuth}
                         disabled={loading}
                         className="w-full bg-yellow-600 hover:bg-yellow-500 text-white font-bold py-3 rounded-lg flex items-center justify-center transition-colors"
                     >
-                         {loading ? <Loader2 className="animate-spin" /> : 'Enter Demo Mode'}
+                         {loading ? <Loader2 className="animate-spin" /> : 'Demo Moduna Gir'}
                     </button>
                 </div>
             </div>
@@ -103,19 +103,19 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
 
     const getTitle = () => {
         switch(mode) {
-            case 'signin': return 'Welcome Back';
-            case 'signup': return 'Create Account';
-            case 'forgot': return 'Reset Password';
-            case 'update_password': return 'Set New Password';
+            case 'signin': return 'Tekrar Hoş Geldiniz';
+            case 'signup': return 'Hesap Oluştur';
+            case 'forgot': return 'Şifreyi Sıfırla';
+            case 'update_password': return 'Yeni Şifre Belirle';
         }
     };
 
     const getSubtitle = () => {
          switch(mode) {
-            case 'signin': return 'Sign in to access your games';
-            case 'signup': return 'Join to start creating';
-            case 'forgot': return 'Enter email to receive reset link';
-            case 'update_password': return 'Enter your new password';
+            case 'signin': return 'Oyunlarınıza erişmek için giriş yapın';
+            case 'signup': return 'Oluşturmaya başlamak için katılın';
+            case 'forgot': return 'Sıfırlama bağlantısı için e-posta girin';
+            case 'update_password': return 'Yeni şifrenizi girin';
         }
     };
 
@@ -132,7 +132,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
             <form onSubmit={handleAuth} className="space-y-4">
                 {mode !== 'update_password' && (
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-1">Email</label>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">E-posta</label>
                         <div className="relative">
                             <Mail className="absolute left-3 top-3 h-5 w-5 text-slate-500" />
                             <input
@@ -141,7 +141,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
                                 className="pl-10 w-full bg-slate-900 border border-slate-600 rounded-lg p-2.5 text-white focus:border-indigo-500 outline-none"
-                                placeholder="you@example.com"
+                                placeholder="sen@ornek.com"
                             />
                         </div>
                     </div>
@@ -149,7 +149,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                 
                 {mode !== 'forgot' && (
                     <div>
-                        <label className="block text-sm font-medium text-slate-400 mb-1">{mode === 'update_password' ? 'New Password' : 'Password'}</label>
+                        <label className="block text-sm font-medium text-slate-400 mb-1">{mode === 'update_password' ? 'Yeni Şifre' : 'Şifre'}</label>
                         <div className="relative">
                             <Lock className="absolute left-3 top-3 h-5 w-5 text-slate-500" />
                             <input
@@ -168,7 +168,7 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                 {mode === 'signin' && (
                     <div className="flex justify-end">
                         <button type="button" onClick={() => setMode('forgot')} className="text-sm text-indigo-400 hover:text-indigo-300">
-                            Forgot Password?
+                            Şifremi unuttum?
                         </button>
                     </div>
                 )}
@@ -185,22 +185,22 @@ const Auth: React.FC<AuthProps> = ({ onSuccess, initialMode = 'signin' }) => {
                     className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-lg transition-colors flex items-center justify-center"
                 >
                     {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 
-                        (mode === 'signin' ? 'Sign In' : mode === 'signup' ? 'Sign Up' : mode === 'update_password' ? 'Update Password' : 'Send Reset Link')}
+                        (mode === 'signin' ? 'Giriş Yap' : mode === 'signup' ? 'Kayıt Ol' : mode === 'update_password' ? 'Şifreyi Güncelle' : 'Bağlantı Gönder')}
                 </button>
             </form>
 
             <div className="mt-6 text-center text-sm text-slate-400">
                 {mode === 'forgot' ? (
                      <button onClick={() => setMode('signin')} className="text-indigo-400 hover:underline font-bold flex items-center justify-center w-full">
-                        <ArrowLeft className="w-4 h-4 mr-1"/> Back to Sign In
+                        <ArrowLeft className="w-4 h-4 mr-1"/> Giriş Yap'a Dön
                      </button>
                 ) : mode === 'update_password' ? (
                      <span/>
                 ) : (
                     <>
-                        {mode === 'signin' ? "Don't have an account? " : "Already have an account? "}
+                        {mode === 'signin' ? "Hesabın yok mu? " : "Zaten hesabın var mı? "}
                         <button onClick={() => setMode(mode === 'signin' ? 'signup' : 'signin')} className="text-indigo-400 hover:underline font-bold">
-                            {mode === 'signin' ? 'Sign Up' : 'Sign In'}
+                            {mode === 'signin' ? 'Kayıt Ol' : 'Giriş Yap'}
                         </button>
                     </>
                 )}

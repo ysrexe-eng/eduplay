@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { GameModule, GameType } from '../types';
-import { Brain, Copy, CheckSquare, Layers, ListOrdered, Type, Edit, Trash2, Play, Heart, Globe, Lock } from 'lucide-react';
+import { Brain, Copy, CheckSquare, Layers, ListOrdered, Type, Edit, Trash2, Play, Heart, Globe, Lock, Shuffle } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../services/supabase';
 
 interface GameCardProps {
@@ -22,13 +22,20 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
       setLikes(game.likes || 0);
   }, [game.likes]);
 
-  // Check local storage for anonymous likes or if Supabase check hasn't run yet
+  // Check like status
   useEffect(() => {
       const checkLikeStatus = async () => {
           if (currentUserId && supabase) {
-              // Check DB for logged in user
-              const { data } = await supabase.from('likes').select('id').match({ user_id: currentUserId, game_id: game.id }).single();
-              if (data) setLiked(true);
+              // Check DB for logged in user to ensure cross-device consistency
+              const { data } = await supabase
+                .from('likes')
+                .select('id')
+                .match({ user_id: currentUserId, game_id: game.id })
+                .maybeSingle(); // Use maybeSingle to avoid 406 error on no rows
+              
+              if (data) {
+                  setLiked(true);
+              }
           } else {
               // Check local storage for anonymous user
               const localLikes = JSON.parse(localStorage.getItem('liked_games') || '[]');
@@ -66,12 +73,9 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
              }
 
              // 2. Increment the counter on the game table
-             // This works for both logged in (after insert) and anonymous (direct increment)
-             // Assuming the RPC function is set to 'security definer' or RLS allows update
              const { error: rpcError } = await supabase.rpc('increment_likes', { row_id: game.id });
              
              if (rpcError) {
-                // Fallback: Manual update if RPC fails
                 console.warn("RPC increment_likes failed, falling back to manual update", rpcError);
                 const { data: current, error: fetchError } = await supabase.from('games').select('likes').eq('id', game.id).single();
                 if (!fetchError && current) {
@@ -80,7 +84,6 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
              }
           } catch (err) {
               console.error("Error liking game:", err);
-              // Revert optimistic update only on critical failure
           }
       }
   };
@@ -93,19 +96,21 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
       case GameType.FLASHCARD: return <Copy className="h-8 w-8 text-purple-400" />;
       case GameType.SEQUENCE: return <ListOrdered className="h-8 w-8 text-yellow-400" />;
       case GameType.CLOZE: return <Type className="h-8 w-8 text-pink-400" />;
+      case GameType.MIXED: return <Shuffle className="h-8 w-8 text-cyan-400" />;
       default: return <Brain className="h-8 w-8 text-gray-400" />;
     }
   };
 
   const getLabel = () => {
      switch(game.gameType) {
-      case GameType.QUIZ: return "Quiz";
-      case GameType.MATCHING: return "Matching";
-      case GameType.TRUE_FALSE: return "True / False";
-      case GameType.FLASHCARD: return "Flashcards";
-      case GameType.SEQUENCE: return "Ordering";
-      case GameType.CLOZE: return "Fill Blanks";
-      default: return "Game";
+      case GameType.QUIZ: return "Test";
+      case GameType.MATCHING: return "Eşleştirme";
+      case GameType.TRUE_FALSE: return "Doğru / Yanlış";
+      case GameType.FLASHCARD: return "Kartlar";
+      case GameType.SEQUENCE: return "Sıralama";
+      case GameType.CLOZE: return "Boşluk Doldurma";
+      case GameType.MIXED: return "Karışık Mod";
+      default: return "Oyun";
     }
   };
 
@@ -118,14 +123,14 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
             <button 
               onClick={(e) => { e.stopPropagation(); onEdit(game); }}
               className="p-2 bg-slate-700 rounded-full hover:bg-indigo-600 text-white shadow-lg border border-slate-600 transition-colors"
-              title="Edit"
+              title="Düzenle"
             >
               <Edit className="h-4 w-4" />
             </button>
             <button 
               onClick={(e) => { e.stopPropagation(); onDelete(game.id); }}
               className="p-2 bg-slate-700 rounded-full hover:bg-red-600 text-white shadow-lg border border-slate-600 transition-colors"
-              title="Delete"
+              title="Sil"
             >
               <Trash2 className="h-4 w-4" />
             </button>
@@ -137,7 +142,7 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
          <div className="absolute top-2 left-2 z-10">
              <span className={`flex items-center text-[10px] uppercase font-bold px-2 py-1 rounded-full ${game.isPublic ? 'bg-emerald-900/80 text-emerald-400' : 'bg-slate-900/80 text-slate-400'}`}>
                  {game.isPublic ? <Globe className="w-3 h-3 mr-1"/> : <Lock className="w-3 h-3 mr-1"/>}
-                 {game.isPublic ? 'Public' : 'Private'}
+                 {game.isPublic ? 'Herkese Açık' : 'Gizli'}
              </span>
          </div>
       )}
@@ -161,9 +166,9 @@ const GameCard: React.FC<GameCardProps> = ({ game, onPlay, onEdit, onDelete, cur
         <h3 className="font-bold text-white mb-1 line-clamp-1 text-lg">{game.title}</h3>
         <p className="text-sm text-gray-400 line-clamp-2">{game.description}</p>
         <div className="mt-auto pt-4 flex items-center justify-between border-t border-slate-700/50">
-            <span className="text-xs text-gray-500 truncate max-w-[100px]">By {game.author}</span>
+            <span className="text-xs text-gray-500 truncate max-w-[100px]">{game.author}</span>
             <span className="text-xs text-indigo-400 flex items-center font-semibold">
-              <Play className="w-3 h-3 mr-1" /> Play
+              <Play className="w-3 h-3 mr-1" /> Oyna
             </span>
         </div>
       </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { GameModule, GameType, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem, SequenceItem, ClozeItem } from '../types';
+import { GameModule, GameType, QuizItem, MatchingPair, TrueFalseItem, FlashcardItem, SequenceItem, ClozeItem, MixedStage } from '../types';
 import { CheckCircle, XCircle, ChevronLeft, ChevronRight, RotateCcw, ArrowDown, Check, Clock } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { supabase } from '../services/supabase';
@@ -26,7 +26,6 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onBack }) => {
     if(supabase && game.id) {
         supabase.rpc('increment_plays', { row_id: game.id }).then(({ error }) => {
             if (error) {
-                // If RPC fails (e.g. not created in DB), try fallback to direct update if user owns it
                 // console.warn("Play count update failed", error);
             }
         });
@@ -76,13 +75,13 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onBack }) => {
     return (
       <div className="max-w-2xl mx-auto p-8 bg-slate-800 rounded-2xl shadow-xl text-center border border-slate-700 animate-fade-in mt-10">
         <h2 className="text-3xl font-bold text-white mb-4">
-            {timeLeft === 0 ? "Time's Up!" : "Good Job!"}
+            {timeLeft === 0 ? "Süre Doldu!" : "Tebrikler!"}
         </h2>
         <div className="text-6xl font-black text-indigo-400 mb-6">{score}</div>
-        <p className="text-gray-400 mb-8">Points Scored</p>
+        <p className="text-gray-400 mb-8">Toplam Puan</p>
         <div className="flex justify-center space-x-4">
           <button onClick={onBack} className="px-6 py-3 bg-slate-700 text-white rounded-lg hover:bg-slate-600 font-semibold transition-colors">
-            Back to Menu
+            Menüye Dön
           </button>
           <button onClick={() => {
               setIsFinished(false);
@@ -90,17 +89,38 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onBack }) => {
               setTimeLeft(game.settings?.timeLimit || null);
               setTimerActive(true);
           }} className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 font-semibold flex items-center transition-colors">
-            <RotateCcw className="w-5 h-5 mr-2" /> Play Again
+            <RotateCcw className="w-5 h-5 mr-2" /> Tekrar Oyna
           </button>
         </div>
       </div>
     );
   }
 
+  const renderGameContent = (type: GameType, data: any, onSubFinish: (s: number, t: number) => void) => {
+      switch (type) {
+          case GameType.QUIZ:
+            return <QuizPlayer data={data} onFinish={onSubFinish} randomize={game.settings?.randomizeOrder} />;
+          case GameType.MATCHING:
+            return <MatchingPlayer data={data} onFinish={onSubFinish} />;
+          case GameType.TRUE_FALSE:
+            return <TrueFalsePlayer data={data} onFinish={onSubFinish} />;
+          case GameType.FLASHCARD:
+            return <FlashcardPlayer data={data} onFinish={() => onSubFinish(100, 100)} />;
+          case GameType.SEQUENCE:
+            return <SequencePlayer data={data} onFinish={onSubFinish} />;
+          case GameType.CLOZE:
+            return <ClozePlayer data={data} onFinish={onSubFinish} caseSensitive={game.settings?.caseSensitive} />;
+          case GameType.MIXED:
+            return <MixedPlayer stages={data.stages} onFinish={onSubFinish} settings={game.settings} />;
+          default:
+            return <div className="text-white text-center">Bilinmeyen oyun türü</div>;
+      }
+  };
+
   return (
       <div className="relative pb-20">
           <button onClick={onBack} className="absolute top-0 left-0 text-gray-400 hover:text-white flex items-center mb-4">
-              <ChevronLeft className="w-5 h-5 mr-1"/> Exit
+              <ChevronLeft className="w-5 h-5 mr-1"/> Çıkış
           </button>
 
           {timeLeft !== null && (
@@ -111,30 +131,53 @@ const GamePlayer: React.FC<GamePlayerProps> = ({ game, onBack }) => {
           )}
           
           <div className="mt-8">
-            {(() => {
-                switch (game.gameType) {
-                    case GameType.QUIZ:
-                    return <QuizPlayer data={game.data as { type: GameType.QUIZ; items: QuizItem[] }} onFinish={handleFinish} randomize={game.settings?.randomizeOrder} />;
-                    case GameType.MATCHING:
-                    return <MatchingPlayer data={game.data as { type: GameType.MATCHING; pairs: MatchingPair[] }} onFinish={handleFinish} />;
-                    case GameType.TRUE_FALSE:
-                    return <TrueFalsePlayer data={game.data as { type: GameType.TRUE_FALSE; items: TrueFalseItem[] }} onFinish={handleFinish} />;
-                    case GameType.FLASHCARD:
-                    return <FlashcardPlayer data={game.data as { type: GameType.FLASHCARD; items: FlashcardItem[] }} onFinish={() => handleFinish(100, 100)} />;
-                    case GameType.SEQUENCE:
-                    return <SequencePlayer data={game.data as { type: GameType.SEQUENCE; items: SequenceItem[]; question?: string }} onFinish={handleFinish} />;
-                    case GameType.CLOZE:
-                    return <ClozePlayer data={game.data as { type: GameType.CLOZE; data: ClozeItem }} onFinish={handleFinish} caseSensitive={game.settings?.caseSensitive} />;
-                    default:
-                    return <div className="text-white text-center">Unknown game type</div>;
-                }
-            })()}
+            {renderGameContent(game.gameType, game.data, handleFinish)}
           </div>
       </div>
   );
 };
 
 /* --- Sub-Components --- */
+
+const MixedPlayer = ({ stages, onFinish, settings }: { stages: MixedStage[], onFinish: (s: number, t: number) => void, settings?: any }) => {
+    const [currentStageIdx, setCurrentStageIdx] = useState(0);
+    const [totalScore, setTotalScore] = useState(0);
+
+    const handleStageFinish = (stageScore: number, stageTotal: number) => {
+        // Normalize score to avoid massive numbers, or just sum them up. Let's sum up.
+        const newScore = totalScore + stageScore;
+        setTotalScore(newScore);
+
+        if (currentStageIdx < stages.length - 1) {
+            setCurrentStageIdx(prev => prev + 1);
+        } else {
+            onFinish(newScore, 100 * stages.length); // Assuming ~100 per stage max for simplicity
+        }
+    };
+
+    const currentStage = stages[currentStageIdx];
+
+    return (
+        <div className="animate-fade-in">
+             <div className="text-center mb-4">
+                 <span className="bg-indigo-900/50 text-indigo-200 text-xs px-3 py-1 rounded-full border border-indigo-700">
+                     Bölüm {currentStageIdx + 1} / {stages.length}
+                 </span>
+             </div>
+             {(() => {
+                 switch(currentStage.type) {
+                     case GameType.QUIZ: return <QuizPlayer data={currentStage.data as any} onFinish={handleStageFinish} randomize={settings?.randomizeOrder}/>;
+                     case GameType.MATCHING: return <MatchingPlayer data={currentStage.data as any} onFinish={handleStageFinish}/>;
+                     case GameType.TRUE_FALSE: return <TrueFalsePlayer data={currentStage.data as any} onFinish={handleStageFinish}/>;
+                     case GameType.SEQUENCE: return <SequencePlayer data={currentStage.data as any} onFinish={handleStageFinish}/>;
+                     case GameType.CLOZE: return <ClozePlayer data={currentStage.data as any} onFinish={handleStageFinish} caseSensitive={settings?.caseSensitive}/>;
+                     case GameType.FLASHCARD: return <FlashcardPlayer data={currentStage.data as any} onFinish={() => handleStageFinish(100, 100)}/>;
+                     default: return <div>Desteklenmeyen aşama türü</div>;
+                 }
+             })()}
+        </div>
+    );
+};
 
 const QuizPlayer = ({ data, onFinish, randomize }: { data: { items: QuizItem[] }, onFinish: (s: number, t: number) => void, randomize?: boolean }) => {
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -177,8 +220,8 @@ const QuizPlayer = ({ data, onFinish, randomize }: { data: { items: QuizItem[] }
   return (
     <div className="max-w-3xl mx-auto bg-slate-800 rounded-xl shadow-lg p-6 border border-slate-700 mt-4 animate-fade-in">
       <div className="flex justify-between items-center mb-6 border-b border-slate-700 pb-4">
-        <span className="text-sm font-semibold text-gray-400">Question {currentIdx + 1} / {questions.length}</span>
-        <span className="text-sm font-bold text-indigo-400">Score: {score}</span>
+        <span className="text-sm font-semibold text-gray-400">Soru {currentIdx + 1} / {questions.length}</span>
+        <span className="text-sm font-bold text-indigo-400">Puan: {score}</span>
       </div>
       <h2 className="text-xl font-bold text-white mb-6">{currentQ.question}</h2>
       
@@ -206,7 +249,7 @@ const QuizPlayer = ({ data, onFinish, randomize }: { data: { items: QuizItem[] }
       {showResult && (
         <div className="mt-6 animate-fade-in">
            <button onClick={nextQuestion} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-semibold hover:bg-indigo-500 transition-colors">
-             {currentIdx === questions.length - 1 ? "Finish Quiz" : "Next Question"}
+             {currentIdx === questions.length - 1 ? "Testi Bitir" : "Sonraki Soru"}
            </button>
         </div>
       )}
@@ -261,8 +304,8 @@ const MatchingPlayer = ({ data, onFinish }: { data: { pairs: MatchingPair[] }, o
   return (
     <div className="max-w-4xl mx-auto mt-4 animate-fade-in">
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-4 mb-4 text-center">
-         <p className="text-indigo-300 font-medium">Tap left item, then matching right item.</p>
-         <p className="text-sm text-gray-500 mt-1">Mistakes: {mistakes}</p>
+         <p className="text-indigo-300 font-medium">Soldaki ögeyi seçip sağdaki eşini bul.</p>
+         <p className="text-sm text-gray-500 mt-1">Hatalar: {mistakes}</p>
       </div>
       <div className="grid grid-cols-2 gap-8">
         <div className="space-y-3">
@@ -332,17 +375,17 @@ const TrueFalsePlayer = ({ data, onFinish }: { data: { items: TrueFalseItem[] },
     return (
         <div className="max-w-xl mx-auto bg-slate-800 rounded-xl shadow-lg p-8 text-center border border-slate-700 mt-4 animate-fade-in">
              <div className="mb-8">
-                 <span className="text-xs uppercase tracking-wider text-gray-500 font-bold">Statement {currentIdx + 1} of {data.items.length}</span>
+                 <span className="text-xs uppercase tracking-wider text-gray-500 font-bold">İfade {currentIdx + 1} / {data.items.length}</span>
                  <h2 className="text-2xl font-bold text-white mt-4 leading-relaxed">{item.statement}</h2>
              </div>
              {feedback ? (
                  <div className={`p-4 rounded-lg mb-6 ${feedback === 'correct' ? 'bg-emerald-900/50 text-emerald-300' : 'bg-red-900/50 text-red-300'}`}>
-                     {feedback === 'correct' ? <div className="font-bold">Correct!</div> : <div><div className="font-bold">Incorrect</div>{item.correction && <p className="text-sm mt-2">{item.correction}</p>}</div>}
+                     {feedback === 'correct' ? <div className="font-bold">Doğru!</div> : <div><div className="font-bold">Yanlış</div>{item.correction && <p className="text-sm mt-2">{item.correction}</p>}</div>}
                  </div>
              ) : (
                  <div className="grid grid-cols-2 gap-4">
-                    <button onClick={() => handleGuess(true)} className="p-6 rounded-xl border-2 border-emerald-600 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all font-bold text-xl">TRUE</button>
-                    <button onClick={() => handleGuess(false)} className="p-6 rounded-xl border-2 border-red-600 text-red-400 hover:bg-red-600 hover:text-white transition-all font-bold text-xl">FALSE</button>
+                    <button onClick={() => handleGuess(true)} className="p-6 rounded-xl border-2 border-emerald-600 text-emerald-400 hover:bg-emerald-600 hover:text-white transition-all font-bold text-xl">DOĞRU</button>
+                    <button onClick={() => handleGuess(false)} className="p-6 rounded-xl border-2 border-red-600 text-red-400 hover:bg-red-600 hover:text-white transition-all font-bold text-xl">YANLIŞ</button>
                  </div>
              )}
         </div>
@@ -366,10 +409,10 @@ const FlashcardPlayer = ({ data, onFinish }: { data: { items: FlashcardItem[] },
 
     return (
         <div className="max-w-2xl mx-auto flex flex-col items-center mt-4 animate-fade-in">
-            <div className="w-full text-center mb-4 text-gray-400">Card {currentIdx + 1} / {data.items.length}</div>
+            <div className="w-full text-center mb-4 text-gray-400">Kart {currentIdx + 1} / {data.items.length}</div>
             <div className="group w-full h-80 perspective-1000 cursor-pointer" onClick={() => setIsFlipped(!isFlipped)} style={{ perspective: '1000px' }}>
                 <div className={`relative w-full h-full text-center transition-transform duration-500 transform-style-3d shadow-xl rounded-2xl ${isFlipped ? 'rotate-y-180' : ''}`} style={{ transformStyle: 'preserve-3d', transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)' }}>
-                    <div className="absolute w-full h-full backface-hidden bg-slate-800 rounded-2xl flex items-center justify-center p-8 border border-slate-700" style={{ backfaceVisibility: 'hidden' }}><h2 className="text-3xl font-bold text-white">{item.front}</h2><span className="absolute bottom-4 text-xs text-gray-500">Click to flip</span></div>
+                    <div className="absolute w-full h-full backface-hidden bg-slate-800 rounded-2xl flex items-center justify-center p-8 border border-slate-700" style={{ backfaceVisibility: 'hidden' }}><h2 className="text-3xl font-bold text-white">{item.front}</h2><span className="absolute bottom-4 text-xs text-gray-500">Çevirmek için tıkla</span></div>
                     <div className="absolute w-full h-full backface-hidden bg-indigo-700 rounded-2xl flex items-center justify-center p-8 text-white rotate-y-180" style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}><p className="text-xl font-medium leading-relaxed">{item.back}</p></div>
                 </div>
             </div>
@@ -403,9 +446,9 @@ const SequencePlayer = ({ data, onFinish }: { data: { items: SequenceItem[]; que
     return (
         <div className="max-w-xl mx-auto mt-4 animate-fade-in">
             <div className="bg-slate-800 p-6 rounded-xl border border-slate-700 mb-6">
-                <h3 className="text-lg font-bold text-white mb-4 text-center">{data.question || "Arrange in correct order"}</h3>
+                <h3 className="text-lg font-bold text-white mb-4 text-center">{data.question || "Doğru sıraya dizin"}</h3>
                 <div className="space-y-2">{items.map((item, idx) => (<div key={item.id} className={`p-4 rounded-lg flex items-center justify-between border ${checked ? (item.order === idx ? 'bg-emerald-900/40 border-emerald-500' : 'bg-red-900/40 border-red-500') : 'bg-slate-700 border-slate-600'}`}><span className="text-white font-medium">{item.text}</span>{!checked && (<div className="flex flex-col space-y-1 ml-4"><button onClick={() => moveItem(idx, 'up')} disabled={idx === 0} className="p-1 hover:bg-slate-600 rounded disabled:opacity-30 text-gray-300"><ChevronLeft className="w-4 h-4 rotate-90" /></button><button onClick={() => moveItem(idx, 'down')} disabled={idx === items.length - 1} className="p-1 hover:bg-slate-600 rounded disabled:opacity-30 text-gray-300"><ChevronLeft className="w-4 h-4 -rotate-90" /></button></div>)}</div>))}</div>
-                {!checked ? <button onClick={checkOrder} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-500">Check Order</button> : <button onClick={() => setChecked(false)} className="w-full mt-6 bg-slate-600 text-white py-3 rounded-lg font-bold hover:bg-slate-500">Retry</button>}
+                {!checked ? <button onClick={checkOrder} className="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-500">Kontrol Et</button> : <button onClick={() => setChecked(false)} className="w-full mt-6 bg-slate-600 text-white py-3 rounded-lg font-bold hover:bg-slate-500">Tekrar Dene</button>}
             </div>
         </div>
     );
@@ -426,9 +469,9 @@ const ClozePlayer = ({ data, onFinish, caseSensitive }: { data: { data: ClozeIte
     };
     return (
         <div className="max-w-2xl mx-auto bg-slate-800 p-8 rounded-xl border border-slate-700 mt-4 animate-fade-in">
-            <h3 className="text-xl font-bold text-white mb-6 text-center">Fill in the Blanks</h3>
+            <h3 className="text-xl font-bold text-white mb-6 text-center">Boşlukları Doldurun</h3>
             <div className="text-lg leading-loose text-gray-200">{data.data.textParts.map((part, index) => (<React.Fragment key={index}><span>{part}</span>{index < data.data.answers.length && (<span className="inline-block mx-1"><input type="text" value={inputs[index]} onChange={(e) => { if (checked) setChecked(false); const newInputs = [...inputs]; newInputs[index] = e.target.value; setInputs(newInputs); }} disabled={checked && (caseSensitive ? inputs[index].trim() === data.data.answers[index] : inputs[index].trim().toLowerCase() === data.data.answers[index].toLowerCase())} className={`w-32 bg-slate-900 border-b-2 px-2 py-1 outline-none text-center transition-colors ${checked ? ((caseSensitive ? inputs[index].trim() === data.data.answers[index] : inputs[index].trim().toLowerCase() === data.data.answers[index].toLowerCase()) ? 'border-emerald-500 text-emerald-400' : 'border-red-500 text-red-400') : 'border-slate-500 text-white focus:border-indigo-500'}`} /></span>)}</React.Fragment>))}</div>
-            <div className="mt-8"><button onClick={handleCheck} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-500 transition-colors">Check Answers</button></div>
+            <div className="mt-8"><button onClick={handleCheck} className="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-500 transition-colors">Cevapları Kontrol Et</button></div>
         </div>
     );
 };
